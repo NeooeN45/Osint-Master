@@ -901,45 +901,46 @@ ${entities.length > 0 ? `\n=== INVESTIGATION: ${target} ===\nEntites (${entities
                       <AiAnalysisInline analysis={aiAnalysis} onOpenChat={() => setShowChat(true)} />
                     )}
                     <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-4 text-[10px] text-zinc-500">
-                      <span><strong className="text-emerald-400">{entities.length}</strong> entities</span>
-                      <span><strong className="text-accent">{correlations.length}</strong> correlations</span>
-                      <span><strong className="text-cyan-400">{toolList.filter(t => t.status === "done").length}</strong> tools OK</span>
-                      <span><strong className="text-zinc-400">{elapsed}s</strong></span>
+                      <div className="flex items-center gap-4 text-[10px] text-zinc-500">
+                        <span><strong className="text-emerald-400">{entities.length}</strong> entities</span>
+                        <span><strong className="text-accent">{correlations.length}</strong> correlations</span>
+                        <span><strong className="text-cyan-400">{toolList.filter(t => t.status === "done").length}</strong> tools OK</span>
+                        <span><strong className="text-zinc-400">{elapsed}s</strong></span>
+                      </div>
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => setShowChat(!showChat)}
+                        className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                          showChat ? "bg-accent/15 text-accent" : "text-zinc-500 hover:text-zinc-300 bg-zinc-800/50"
+                        }`}
+                      >
+                        <BrainCircuit className="w-3.5 h-3.5" />
+                        AI Chat
+                      </button>
+                      <button
+                        onClick={() => {
+                          const data = JSON.stringify({ target, entities, correlations, aiAnalysis, stats: finalStats }, null, 2);
+                          navigator.clipboard.writeText(data);
+                          toast.success("Copied to clipboard");
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300 bg-zinc-800/50 rounded-lg transition-colors"
+                      >
+                        <Copy className="w-3 h-3" /> Copy
+                      </button>
+                      <button
+                        onClick={() => {
+                          const data = JSON.stringify({ target, entities, correlations, aiAnalysis, stats: finalStats }, null, 2);
+                          const blob = new Blob([data], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url; a.download = `osint_${target}_${Date.now()}.json`;
+                          a.click(); URL.revokeObjectURL(url);
+                        }}
+                        className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300 bg-zinc-800/50 rounded-lg transition-colors"
+                      >
+                        <Download className="w-3 h-3" /> Export
+                      </button>
                     </div>
-                    <div className="flex-1" />
-                    <button
-                      onClick={() => setShowChat(!showChat)}
-                      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                        showChat ? "bg-accent/15 text-accent" : "text-zinc-500 hover:text-zinc-300 bg-zinc-800/50"
-                      }`}
-                    >
-                      <BrainCircuit className="w-3.5 h-3.5" />
-                      AI Chat
-                    </button>
-                    <button
-                      onClick={() => {
-                        const data = JSON.stringify({ target, entities, correlations, aiAnalysis, stats: finalStats }, null, 2);
-                        navigator.clipboard.writeText(data);
-                        toast.success("Copied to clipboard");
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300 bg-zinc-800/50 rounded-lg transition-colors"
-                    >
-                      <Copy className="w-3 h-3" /> Copy
-                    </button>
-                    <button
-                      onClick={() => {
-                        const data = JSON.stringify({ target, entities, correlations, aiAnalysis, stats: finalStats }, null, 2);
-                        const blob = new Blob([data], { type: "application/json" });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = url; a.download = `osint_${target}_${Date.now()}.json`;
-                        a.click(); URL.revokeObjectURL(url);
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-zinc-500 hover:text-zinc-300 bg-zinc-800/50 rounded-lg transition-colors"
-                    >
-                      <Download className="w-3 h-3" /> Export
-                    </button>
                   </div>
                 )}
               </div>

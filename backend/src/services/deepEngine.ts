@@ -1750,7 +1750,6 @@ const MODULES: OSINTModule[] = [
       try {
         const resp = await axios.get(`https://wa.me/${intlPhone}`, {
           timeout: 8000,
-          maxRedirects: 5,
           headers: { "User-Agent": "WhatsApp/2.23.24.82 A" },
           validateStatus: () => true,
         });
@@ -2481,7 +2480,7 @@ const MODULES: OSINTModule[] = [
       // wa.me GET — redirects to chat page if registered
       try {
         const resp = await axios.get(`https://wa.me/${phone}`, {
-          timeout: 8000, maxRedirects: 5, validateStatus: () => true,
+          timeout: 8000, validateStatus: () => true,
           headers: { "User-Agent": "Mozilla/5.0 (compatible; WhatsApp/2.23)" },
         });
         const html = (resp.data || "") as string;
