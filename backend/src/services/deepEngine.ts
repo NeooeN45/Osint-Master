@@ -420,36 +420,17 @@ const MODULES: OSINTModule[] = [
     priority: 2,
     isAvailable: async () => true,
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `Phone number analysis for ${target}...` } });
+      emit({ type: "log", data: { message: `NumVerify lookup for ${target}...` } });
+      const clean = target.replace(/[\s()-]/g, "");
+      const apiKey = process.env.NUMVERIFY_API_KEY;
+      if (!apiKey) return { success: false, data: { error: "NUMVERIFY_API_KEY not set" }, entities: [] };
+      const data = await tryHttp(`http://apilayer.net/api/validate?access_key=${apiKey}&number=${clean}&format=1`);
+      if (!data || !data.valid) return { success: false, data, entities: [] };
       const entities: DeepEntity[] = [];
-      try {
-        // Use libphonenumber-js for local parsing (no API key needed)
-        const { parsePhoneNumber, isValidPhoneNumber } = await import("libphonenumber-js");
-        if (!isValidPhoneNumber(target)) return { success: false, data: { error: "Invalid phone number" }, entities: [] };
-        const parsed = parsePhoneNumber(target);
-        const country = parsed.country;
-        const nationalNum = parsed.nationalNumber;
-        const intlFormat = parsed.formatInternational();
-        const lineType = parsed.getType(); // MOBILE, FIXED_LINE, VOIP, etc.
-        entities.push({
-          id: makeEntityId(), type: "phone", value: intlFormat,
-          source: "numverify", confidence: 92,
-          metadata: { country, nationalNumber: nationalNum, countryCode: parsed.countryCallingCode, lineType, valid: true, format: intlFormat },
-          verified: true, depth: 0,
-        });
-        if (country) entities.push({ id: makeEntityId(), type: "location", value: country, source: "numverify", confidence: 88, metadata: { phone: target, type: "country" }, verified: true, depth: 0 });
-        if (lineType) entities.push({ id: makeEntityId(), type: "metadata", value: `Line type: ${lineType}`, source: "numverify", confidence: 85, metadata: { phone: target, lineType }, verified: true, depth: 0 });
-        // Try NumVerify API if key present
-        const apiKey = process.env.NUMVERIFY_API_KEY;
-        if (apiKey) {
-          const data = await tryHttp(`http://apilayer.net/api/validate?access_key=${apiKey}&number=${encodeURIComponent(target)}&format=1`);
-          if (data?.carrier) entities.push({ id: makeEntityId(), type: "organization", value: data.carrier, source: "numverify", confidence: 90, metadata: { phone: target }, verified: true, depth: 0 });
-          if (data?.location && data.location !== country) entities.push({ id: makeEntityId(), type: "location", value: data.location, source: "numverify", confidence: 85, metadata: { phone: target, type: "region" }, verified: true, depth: 0 });
-        }
-      } catch (e: any) {
-        return { success: false, data: { error: e.message }, entities: [] };
-      }
-      return { success: true, data: { phone: target }, entities };
+      if (data.carrier) entities.push({ id: makeEntityId(), type: "organization", value: data.carrier, source: "numverify", confidence: 90, metadata: { phone: target }, verified: true, depth: 0 });
+      if (data.location) entities.push({ id: makeEntityId(), type: "location", value: data.location, source: "numverify", confidence: 90, metadata: { phone: target }, verified: true, depth: 0 });
+      if (data.country_name) entities.push({ id: makeEntityId(), type: "location", value: data.country_name, source: "numverify", confidence: 95, metadata: { phone: target, type: "country" }, verified: true, depth: 0 });
+      return { success: true, data, entities };
     },
   },
   {
@@ -457,43 +438,36 @@ const MODULES: OSINTModule[] = [
     priority: 3,
     isAvailable: async () => true,
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `PagesJaunes/Pages Blanches reverse lookup for ${target}...` } });
+      emit({ type: "log", data: { message: `PagesJaunes reverse lookup for ${target}...` } });
+      // Scrape pagesjaunes.fr for reverse phone lookup
       const clean = target.replace(/[\s()+\-]/g, "");
-      const local = clean.startsWith("33") ? "0" + clean.slice(2) : clean.startsWith("+33") ? "0" + clean.slice(3) : clean;
-      const entities: DeepEntity[] = [];
-      const UAs = [
-        "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-        "Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-      ];
-      const urls = [
-        `https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${local}`,
-        `https://www.pagesblanches.fr/annuaireinverse/recherche?quoiqui=${local}`,
-        `https://www.118712.fr/recherche?who=${local}`,
-      ];
-      for (let i = 0; i < urls.length; i++) {
-        try {
-          const resp = await axios.get(urls[i], {
-            timeout: 12000,
-            headers: { "User-Agent": UAs[i % UAs.length], "Accept": "text/html", "Accept-Language": "fr-FR,fr;q=0.9" },
-          });
-          const html = resp.data as string;
-          const nameMatches = [...html.matchAll(/(?:class="[^"]*(?:denomination|nom-prenom|result-name|listing-name)[^"]*"[^>]*>|<h[23][^>]*>)\s*([A-ZÀ-Ÿ][a-zà-ÿA-ZÀ-Ÿ\s'\-]{2,40})/g)];
-          for (const m of nameMatches.slice(0, 5)) {
-            const name = m[1].trim();
-            if (name.length > 2 && !name.match(/^(?:Résultats|Annuaire|Recherche|Page)/i))
-              entities.push({ id: makeEntityId(), type: "person", value: name, source: "pagesjaunes", confidence: 72, metadata: { phone: target, directory: urls[i] }, verified: false, depth: 0 });
+      try {
+        const resp = await axios.get(`https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${clean}`, {
+          timeout: 15000,
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+        });
+        const html = resp.data as string;
+        const entities: DeepEntity[] = [];
+        // Extract names
+        const names = html.match(/class="denomination-links"[^>]*>([^<]+)/g) || [];
+        for (const n of names.slice(0, 5)) {
+          const name = n.replace(/class="denomination-links"[^>]*>/, "").trim();
+          if (name.length > 2) {
+            entities.push({ id: makeEntityId(), type: "person", value: name, source: "pagesjaunes", confidence: 75, metadata: { phone: target }, verified: false, depth: 0 });
           }
-          const addrMatches = [...html.matchAll(/(?:class="[^"]*(?:address|adresse|rue)[^"]*"[^>]*>)\s*([^<]{5,80})/g)];
-          for (const m of addrMatches.slice(0, 3)) {
-            const addr = m[1].trim();
-            if (addr.length > 5 && /\d/.test(addr))
-              entities.push({ id: makeEntityId(), type: "location", value: addr, source: "pagesjaunes", confidence: 68, metadata: { phone: target }, verified: false, depth: 0 });
+        }
+        // Extract addresses
+        const addresses = html.match(/class="address-container"[^>]*>([^<]+)/g) || [];
+        for (const a of addresses.slice(0, 5)) {
+          const addr = a.replace(/class="address-container"[^>]*>/, "").trim();
+          if (addr.length > 5) {
+            entities.push({ id: makeEntityId(), type: "location", value: addr, source: "pagesjaunes", confidence: 70, metadata: { phone: target }, verified: false, depth: 0 });
           }
-          if (entities.length > 0) break;
-        } catch {}
+        }
+        return { success: entities.length > 0, data: { results: entities.length }, entities };
+      } catch {
+        return { success: false, data: null, entities: [] };
       }
-      return { success: true, data: { phone: target, found: entities.length }, entities };
     },
   },
 
@@ -1249,44 +1223,38 @@ const MODULES: OSINTModule[] = [
     },
   },
 
-  // ---- Veriphone — Phone number enrichment (libphonenumber-js + free APIs) ----
+  // ---- RAPIDAPI: Veriphone — Phone number enrichment ----
   {
     id: "veriphone", name: "Veriphone (Phone Lookup)", category: "phone", targetTypes: ["phone"],
     priority: 2,
-    isAvailable: async () => true,
+    isAvailable: async () => !!process.env.RAPIDAPI_KEY,
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `Phone enrichment for ${target}...` } });
+      emit({ type: "log", data: { message: `Veriphone enrichment for ${target}...` } });
+      const key = process.env.RAPIDAPI_KEY!;
       const entities: DeepEntity[] = [];
       try {
-        const { parsePhoneNumber, isValidPhoneNumber } = await import("libphonenumber-js");
-        if (!isValidPhoneNumber(target)) return { success: false, data: { error: "Invalid" }, entities: [] };
-        const parsed = parsePhoneNumber(target);
-        const lineTypeRaw = parsed.getType();
-        const intl = parsed.formatInternational();
-        const national = parsed.formatNational();
-        const country = parsed.country || "";
-        const prefix = parsed.countryCallingCode;
-        entities.push({
-          id: makeEntityId(), type: "phone", value: intl,
-          source: "veriphone", confidence: 92,
-          metadata: { valid: true, type: lineTypeRaw, country, countryCode: prefix, internationalFormat: intl, localFormat: national, countryPrefix: "+" + prefix },
-          verified: true, depth: 0,
-        });
-        if (country) entities.push({ id: makeEntityId(), type: "location", value: country, source: "veriphone", confidence: 85, metadata: { phone: target }, verified: true, depth: 0 });
-        if (lineTypeRaw) entities.push({ id: makeEntityId(), type: "metadata", value: `Phone type: ${lineTypeRaw} | Country: ${country} | Prefix: +${prefix}`, source: "veriphone", confidence: 88, metadata: { phone: target, lineType: lineTypeRaw, country, prefix }, verified: true, depth: 0 });
-        // Try free carrier lookup via OpenCNAM or similar
-        const key = process.env.RAPIDAPI_KEY;
-        if (key) {
-          const apis = [
-            { host: "phone-number-to-carrier.p.rapidapi.com", path: `/?phone=${encodeURIComponent(target)}` },
-            { host: "carrier-lookup.p.rapidapi.com", path: `/?phone=${encodeURIComponent(target)}` },
-          ];
-          for (const api of apis) {
-            try {
-              const r = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
-              const carrier = r?.carrier || r?.operator || r?.network;
-              if (carrier) { entities.push({ id: makeEntityId(), type: "organization", value: carrier, source: "veriphone", confidence: 85, metadata: { phone: target, type: "carrier" }, verified: true, depth: 0 }); break; }
-            } catch {}
+        const resp = await tryHttp(
+          `https://veriphone.p.rapidapi.com/verify?phone=${encodeURIComponent(target)}`,
+          { headers: { "x-rapidapi-key": key, "x-rapidapi-host": "veriphone.p.rapidapi.com" } }
+        );
+        if (resp?.phone_valid || resp?.phone) {
+          entities.push({
+            id: makeEntityId(), type: "phone", value: resp.phone || target,
+            source: "veriphone", confidence: 90,
+            metadata: {
+              valid: resp.phone_valid,
+              type: resp.phone_type,           // mobile / fixed_line / voip
+              carrier: resp.carrier,
+              country: resp.country,
+              countryCode: resp.country_code,
+              countryPrefix: resp.country_prefix,
+              internationalFormat: resp.international_format,
+              localFormat: resp.local_format,
+            },
+            verified: true, depth: 0,
+          });
+          if (resp.country) {
+            entities.push({ id: makeEntityId(), type: "location", value: resp.country, source: "veriphone", confidence: 80, metadata: { phone: target, carrier: resp.carrier }, verified: true, depth: 0 });
           }
         }
       } catch {}
@@ -1740,55 +1708,45 @@ const MODULES: OSINTModule[] = [
   {
     id: "whatsapp_osint_rapidapi", name: "WhatsApp OSINT (RapidAPI)", category: "phone", targetTypes: ["phone"],
     priority: 1,
-    isAvailable: async () => true,
+    isAvailable: async () => !!process.env.RAPIDAPI_KEY,
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `WhatsApp account check for ${target}...` } });
+      emit({ type: "log", data: { message: `WhatsApp OSINT for ${target}...` } });
+      const key = process.env.RAPIDAPI_KEY!;
       const phone = target.replace(/\D/g, "");
-      const intlPhone = target.startsWith("+") ? phone : phone;
       const entities: DeepEntity[] = [];
-      // Method 1: wa.me public link check (HEAD request — 200 if registered, 404 if not)
-      try {
-        const resp = await axios.get(`https://wa.me/${intlPhone}`, {
-          timeout: 8000,
-          headers: { "User-Agent": "WhatsApp/2.23.24.82 A" },
-          validateStatus: () => true,
-        });
-        const registered = resp.status === 200 || resp.status === 302;
-        if (registered) {
+      const apis = [
+        { host: "whatsapp-osint.p.rapidapi.com",  path: `/profile?phone=${phone}` },
+        { host: "whatsapp-data1.p.rapidapi.com",  path: `/v1/WhatsApp/check_exists?phone=${phone}` },
+      ];
+      for (const api of apis) {
+        try {
+          const resp = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
+          const d = (resp as any)?.data || resp;
+          if (!d?.exists && !d?.registered && !d?.is_registered && !d?.whatsapp) continue;
+          const name = d.name || d.displayName || d.pushname;
+          const pic = d.profile_picture || d.avatar || d.photo || d.profilePicUrl;
+          const about = d.about || d.status || d.bio;
           entities.push({
             id: makeEntityId(), type: "phone", value: target,
-            source: "whatsapp_osint_rapidapi", confidence: 88,
-            metadata: { platform: "WhatsApp", registeredOnWhatsApp: true, waUrl: `https://wa.me/${intlPhone}`, phone: intlPhone },
+            source: "whatsapp_osint_rapidapi", confidence: 95,
+            metadata: {
+              platform: "WhatsApp", registeredOnWhatsApp: true,
+              name, about, profilePicUrl: pic,
+              lastSeen: d.last_seen, isBusiness: d.is_business || d.business,
+              businessCategory: d.business_category, businessDescription: d.business_description,
+              businessEmail: d.business_email, businessWebsite: d.business_website,
+              phone,
+            },
             verified: true, depth: 0,
           });
-          entities.push({ id: makeEntityId(), type: "url", value: `https://wa.me/${intlPhone}`, source: "whatsapp_osint_rapidapi", confidence: 90, metadata: { phone: target, platform: "WhatsApp" }, verified: true, depth: 0 });
-        }
-      } catch {}
-      // Method 2: Try RapidAPI WhatsApp endpoints if subscribed
-      const key = process.env.RAPIDAPI_KEY;
-      if (key && entities.length === 0) {
-        const apis = [
-          { host: "whatsapp-checker2.p.rapidapi.com", path: `/check?phone=${intlPhone}` },
-          { host: "whatsapp-data.p.rapidapi.com", path: `/check?phone=${intlPhone}` },
-          { host: "wa-check.p.rapidapi.com", path: `/api/check/${intlPhone}` },
-        ];
-        for (const api of apis) {
-          try {
-            const resp = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
-            const d = resp?.data || resp;
-            if (!d) continue;
-            const registered = d?.exists || d?.registered || d?.is_registered || d?.whatsapp || d?.onWhatsapp;
-            if (!registered) continue;
-            const name = d.name || d.displayName || d.pushname;
-            const pic = d.profile_picture || d.avatar || d.photo;
-            entities.push({ id: makeEntityId(), type: "phone", value: target, source: "whatsapp_osint_rapidapi", confidence: 95, metadata: { platform: "WhatsApp", registeredOnWhatsApp: true, name, profilePicUrl: pic, phone: intlPhone }, verified: true, depth: 0 });
-            if (name) entities.push({ id: makeEntityId(), type: "person", value: name, source: "whatsapp_osint_rapidapi", confidence: 88, metadata: { phone: target }, verified: true, depth: 0 });
-            if (pic) entities.push({ id: makeEntityId(), type: "image", value: pic, source: "whatsapp_osint_rapidapi", confidence: 90, metadata: { phone: target, platform: "WhatsApp", type: "profile_picture" }, verified: true, depth: 0 });
-            break;
-          } catch {}
-        }
+          if (pic) entities.push({ id: makeEntityId(), type: "image", value: pic, source: "whatsapp_osint_rapidapi", confidence: 93, metadata: { phone: target, type: "profile_picture", platform: "WhatsApp" }, verified: true, depth: 0 });
+          if (name) entities.push({ id: makeEntityId(), type: "person", value: name, source: "whatsapp_osint_rapidapi", confidence: 88, metadata: { phone: target }, verified: true, depth: 0 });
+          if (d.business_email) entities.push({ id: makeEntityId(), type: "email", value: d.business_email, source: "whatsapp_osint_rapidapi", confidence: 90, metadata: { phone: target, type: "business_email" }, verified: true, depth: 0 });
+          if (d.business_website) entities.push({ id: makeEntityId(), type: "url", value: d.business_website, source: "whatsapp_osint_rapidapi", confidence: 88, metadata: { phone: target, type: "business_website" }, verified: true, depth: 0 });
+          break;
+        } catch {}
       }
-      return { success: true, data: { phone: intlPhone, found: entities.length > 0 }, entities };
+      return { success: entities.length > 0, data: { phone }, entities };
     },
   },
 
@@ -2156,48 +2114,42 @@ const MODULES: OSINTModule[] = [
   {
     id: "virtual_phone_detector_rapidapi", name: "Virtual Phone Detector (RapidAPI)", category: "phone", targetTypes: ["phone"],
     priority: 2,
-    isAvailable: async () => true,
+    isAvailable: async () => !!process.env.RAPIDAPI_KEY,
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `VoIP/Virtual phone detection for ${target}...` } });
+      emit({ type: "log", data: { message: `Virtual/VoIP phone check for ${target}...` } });
+      const key = process.env.RAPIDAPI_KEY!;
+      const phone = target.replace(/\D/g, "");
       const entities: DeepEntity[] = [];
-      try {
-        const { parsePhoneNumber, isValidPhoneNumber } = await import("libphonenumber-js");
-        if (!isValidPhoneNumber(target)) return { success: false, data: { error: "Invalid" }, entities: [] };
-        const parsed = parsePhoneNumber(target);
-        const lineType = parsed.getType();
-        const isVoip = lineType === "VOIP" || lineType === "UAN";
-        const isMobile = lineType === "MOBILE" || lineType === "FIXED_LINE_OR_MOBILE";
-        const isFixedLine = lineType === "FIXED_LINE";
-        // Try RapidAPI if subscribed
-        const key = process.env.RAPIDAPI_KEY;
-        let carrier: string | undefined;
-        let riskScore: number | undefined;
-        if (key) {
-          const apis = [
-            { host: "numcheckr.p.rapidapi.com", path: `/check?phone=${target.replace(/\D/g,"")}` },
-            { host: "virtual-phone-numbers-detector.p.rapidapi.com", path: `/check?phone=${target.replace(/\D/g,"")}` },
-          ];
-          for (const api of apis) {
-            try {
-              const r = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
-              const d = r?.data || r;
-              if (d && (d.carrier || d.valid !== undefined)) {
-                carrier = d.carrier || d.operator;
-                riskScore = d.risk_score || d.fraud_score;
-                break;
-              }
-            } catch {}
+      const apis = [
+        { host: "virtual-phone-numbers-detector.p.rapidapi.com", path: `/check?phone=${phone}` },
+        { host: "numcheckr.p.rapidapi.com",                      path: `/check?phone=${phone}` },
+      ];
+      for (const api of apis) {
+        try {
+          const resp = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
+          const d = (resp as any)?.data || resp;
+          if (d?.phone || d?.number || d?.valid !== undefined) {
+            entities.push({
+              id: makeEntityId(), type: "phone", value: target,
+              source: "virtual_phone_detector_rapidapi", confidence: 90,
+              metadata: {
+                phone,
+                isVirtual: d?.is_virtual || d?.virtual || d?.is_voip || d?.voip,
+                isDisposable: d?.is_disposable || d?.disposable || d?.is_temporary,
+                lineType: d?.line_type || d?.type || d?.carrier_type,
+                carrier: d?.carrier || d?.operator,
+                country: d?.country || d?.country_name,
+                countryCode: d?.country_code,
+                valid: d?.valid !== undefined ? d.valid : true,
+                riskScore: d?.risk_score || d?.fraud_score,
+              },
+              verified: true, depth: 0,
+            });
+            break;
           }
-        }
-        entities.push({
-          id: makeEntityId(), type: "phone", value: target,
-          source: "virtual_phone_detector_rapidapi", confidence: 88,
-          metadata: { isVoip, isMobile, isFixedLine, lineType, carrier, riskScore, country: parsed.country, valid: true },
-          verified: true, depth: 0,
-        });
-        if (isVoip) entities.push({ id: makeEntityId(), type: "metadata", value: `⚠️ VOIP/Virtual number detected`, source: "virtual_phone_detector_rapidapi", confidence: 85, metadata: { phone: target, lineType }, verified: true, depth: 0 });
-      } catch {}
-      return { success: entities.length > 0, data: { phone: target }, entities };
+        } catch {}
+      }
+      return { success: entities.length > 0, data: { phone }, entities };
     },
   },
 
@@ -2472,42 +2424,37 @@ const MODULES: OSINTModule[] = [
   {
     id: "whatsapp_rapidapi", name: "WhatsApp Profile (RapidAPI)", category: "phone", targetTypes: ["phone"],
     priority: 2,
-    isAvailable: async () => true,
+    isAvailable: async () => !!process.env.RAPIDAPI_KEY,
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `WhatsApp profile check for ${target}...` } });
+      const key = process.env.RAPIDAPI_KEY!;
       const phone = target.replace(/\D/g, "");
       const entities: DeepEntity[] = [];
-      // wa.me GET — redirects to chat page if registered
-      try {
-        const resp = await axios.get(`https://wa.me/${phone}`, {
-          timeout: 8000, validateStatus: () => true,
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; WhatsApp/2.23)" },
-        });
-        const html = (resp.data || "") as string;
-        // wa.me returns a page with "Open WhatsApp" button if number exists
-        const exists = resp.status === 200 && html.includes("wa.me") && !html.includes("redirect");
-        if (exists) {
-          entities.push({ id: makeEntityId(), type: "phone", value: target, source: "whatsapp_rapidapi", confidence: 82, metadata: { platform: "WhatsApp", registeredOnWhatsApp: true, waUrl: `https://wa.me/${phone}` }, verified: true, depth: 0 });
-        }
-      } catch {}
-      // Try RapidAPI if subscribed
-      const key = process.env.RAPIDAPI_KEY;
-      if (key) {
-        const apis = [
-          { host: "whatsapp-checker2.p.rapidapi.com", path: `/check?phone=${phone}` },
-          { host: "whatsapp-data.p.rapidapi.com", path: `/check?phone=${phone}` },
-        ];
-        for (const api of apis) {
-          try {
-            const d = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
-            if (d?.exists || d?.registered) {
-              if (d.name) entities.push({ id: makeEntityId(), type: "person", value: d.name, source: "whatsapp_rapidapi", confidence: 88, metadata: { phone: target }, verified: true, depth: 0 });
-              break;
-            }
-          } catch {}
-        }
+
+      const apis = [
+        { host: "whatsapp-data1.p.rapidapi.com",   path: `/v1/WhatsApp/check_exists?phone=${phone}` },
+        { host: "whatsapp.p.rapidapi.com",          path: `/exists?phone=${phone}` },
+      ];
+
+      for (const api of apis) {
+        try {
+          const resp = await tryHttp(`https://${api.host}${api.path}`, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host } });
+          const d = resp?.data || resp;
+          if (d?.exists || d?.registered || d?.is_registered) {
+            const picUrl = d.profile_picture || d.avatar || d.photo;
+            entities.push({
+              id: makeEntityId(), type: "phone", value: target,
+              source: "whatsapp_rapidapi", confidence: 92,
+              metadata: { registeredOnWhatsApp: true, name: d.name || d.displayName, profilePicUrl: picUrl, about: d.about || d.status, lastSeen: d.last_seen },
+              verified: true, depth: 0,
+            });
+            if (picUrl) entities.push({ id: makeEntityId(), type: "image", value: picUrl, source: "whatsapp_rapidapi", confidence: 90, metadata: { phone: target, type: "profile_picture", platform: "WhatsApp" }, verified: true, depth: 0 });
+            if (d.name) entities.push({ id: makeEntityId(), type: "person", value: d.name, source: "whatsapp_rapidapi", confidence: 85, metadata: { phone: target }, verified: true, depth: 0 });
+            break;
+          }
+        } catch {}
       }
-      return { success: true, data: { phone, found: entities.length > 0 }, entities };
+      return { success: entities.length > 0, data: { phone: target }, entities };
     },
   },
 
@@ -3309,53 +3256,39 @@ const MODULES: OSINTModule[] = [
     priority: 4,
     isAvailable: async () => true,
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `French directory & reverse phone search for ${target}...` } });
+      emit({ type: "log", data: { message: `French directory search for ${target}...` } });
       const entities: DeepEntity[] = [];
-      const isPhone = /\+?[\d\s()-]{7,}/.test(target) && target.replace(/\D/g, "").length >= 8;
-      const clean = target.replace(/[\s()+\-]/g, "");
-      const local = clean.startsWith("33") ? "0" + clean.slice(2) : clean.startsWith("+33") ? "0" + clean.slice(3) : clean;
-      // 1. Bing search for phone reverse lookup (public, no anti-bot)
+      const isPhone = /\+?[\d\s()-]{7,}/.test(target);
       try {
-        const query = isPhone ? `"${local}" OR "${target.replace(/\D/g,"").replace(/^33/,"0")}" site:pagesjaunes.fr OR site:pagesblanches.fr OR site:118712.fr` : `"${target}" site:pagesblanches.fr OR site:pagesjaunes.fr france annuaire`;
-        const bingResp = await tryHttp(`https://www.bing.com/search?q=${encodeURIComponent(query)}&count=10`, { headers: { "User-Agent": "Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)", "Accept": "text/html" } });
-        if (typeof bingResp === "string" || bingResp?.html) {
-          const html = (bingResp?.html || bingResp) as string;
-          const snippets = [...html.matchAll(/<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>([^<]+)/g)].map(m => m[1].trim()).filter(Boolean);
-          for (const s of snippets.slice(0, 3)) {
-            if (s.length > 5) entities.push({ id: makeEntityId(), type: "metadata", value: s, source: "annuaires_fr", confidence: 65, metadata: { query: target, via: "bing" }, verified: false, depth: 0 });
-          }
+        // Pages Blanches
+        const query = isPhone ? target.replace(/[\s()+\-]/g, "") : encodeURIComponent(target);
+        const url = isPhone
+          ? `https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${query}`
+          : `https://www.pagesblanches.fr/annuaire/recherche?quoiqui=${encodeURIComponent(target)}&ou=france`;
+        const resp = await axios.get(url, {
+          timeout: 10000,
+          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+        });
+        const html = resp.data as string;
+        // Extract names
+        const nameMatches = [...html.matchAll(/class="[^"]*denomination[^"]*"[^>]*>([^<]+)/g)];
+        for (const m of nameMatches.slice(0, 5)) {
+          const name = m[1].trim();
+          if (name.length > 2 && !name.includes("<")) entities.push({ id: makeEntityId(), type: "person", value: name, source: "annuaires_fr", confidence: 75, metadata: { query: target, source: "pagesblanches" }, verified: false, depth: 0 });
+        }
+        // Extract addresses
+        const addrMatches = [...html.matchAll(/class="[^"]*address[^"]*"[^>]*>([^<]+)/g)];
+        for (const m of addrMatches.slice(0, 5)) {
+          const addr = m[1].trim();
+          if (addr.length > 5 && /\d/.test(addr)) entities.push({ id: makeEntityId(), type: "location", value: addr, source: "annuaires_fr", confidence: 70, metadata: { query: target }, verified: false, depth: 0 });
+        }
+        // Extract phones
+        const phoneMatches = [...html.matchAll(/\b0[1-9](?:[\s.-]?\d{2}){4}\b/g)];
+        for (const m of [...new Set(phoneMatches.map(m => m[0]))].slice(0, 3)) {
+          entities.push({ id: makeEntityId(), type: "phone", value: m, source: "annuaires_fr", confidence: 80, metadata: { query: target }, verified: false, depth: 0 });
         }
       } catch {}
-      // 2. Direct scrape with Googlebot UA
-      const urls = isPhone ? [
-        `https://www.pagesblanches.fr/annuaireinverse/recherche?quoiqui=${local}`,
-        `https://www.118712.fr/recherche?who=${local}`,
-      ] : [
-        `https://www.pagesblanches.fr/annuaire/recherche?quoiqui=${encodeURIComponent(target)}&ou=france`,
-      ];
-      for (const url of urls) {
-        try {
-          const resp = await axios.get(url, {
-            timeout: 10000,
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "Accept-Language": "fr-FR,fr;q=0.9" },
-          });
-          const html = resp.data as string;
-          const nameMatches = [...html.matchAll(/(?:class="[^"]*(?:denomination|nom|result)[^"]*"[^>]*>)([^<]{3,50})/g)];
-          for (const m of nameMatches.slice(0, 5)) {
-            const name = m[1].trim();
-            if (name.length > 2 && !name.match(/^(?:Résultats|Annuaire|Recherche)/i))
-              entities.push({ id: makeEntityId(), type: "person", value: name, source: "annuaires_fr", confidence: 74, metadata: { query: target }, verified: false, depth: 0 });
-          }
-          const addrMatches = [...html.matchAll(/(?:class="[^"]*address[^"]*"[^>]*>)([^<]{5,80})/g)];
-          for (const m of addrMatches.slice(0, 3)) {
-            const addr = m[1].trim();
-            if (addr.length > 5 && /\d/.test(addr))
-              entities.push({ id: makeEntityId(), type: "location", value: addr, source: "annuaires_fr", confidence: 68, metadata: { query: target }, verified: false, depth: 0 });
-          }
-          if (entities.filter(e => e.type === "person").length > 0) break;
-        } catch {}
-      }
-      return { success: true, data: { target, found: entities.length }, entities };
+      return { success: entities.length > 0, data: { target, found: entities.length }, entities };
     },
   },
 
