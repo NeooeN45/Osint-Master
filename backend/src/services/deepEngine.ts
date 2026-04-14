@@ -10,6 +10,8 @@ import { EventEmitter } from "events";
 import { logger } from "../utils/logger";
 import { config as dotenvConfig } from "dotenv";
 import path from "path";
+import { NewModules } from "./newModules";
+import { DorkIntelligence, UsernameIntelligence } from "./advancedEngine";
 // Load .env immediately — ensures API keys are in process.env before module init
 dotenvConfig({ path: path.resolve(process.cwd(), ".env") });
 
@@ -751,13 +753,117 @@ const MODULES: OSINTModule[] = [
         entities.push({ id: makeEntityId(), type: "url", value: url, source, confidence, metadata: { query }, verified: false, depth: 0 });
       };
 
-      const dorks = [
-        `"${target}"`,
-        `"${target}" site:linkedin.com OR site:facebook.com OR site:instagram.com`,
-        `"${target}" site:pastebin.com OR site:ghostbin.com OR site:rentry.co`,
-        `"${target}" email OR contact OR phone`,
-        `"${target}" site:github.com OR site:gitlab.com`,
+      // COMPREHENSIVE DORKING STRATEGY - 40+ specialized queries
+      const targetType = detectTargetType(target);
+      
+      // Generate type-specific dorks
+      const dorks = DorkIntelligence.generateDorks(target, targetType);
+      
+      // Add manual high-value dorks
+      const extraDorks = [
+        // Social profiles
+        `"${target}" site:linkedin.com/in/`,
+        `"${target}" site:facebook.com/people`,
+        `"${target}" site:instagram.com/`,
+        `"${target}" site:twitter.com OR site:x.com`,
+        `"${target}" site:tiktok.com/@`,
+        `"${target}" site:reddit.com/user`,
+        `"${target}" site:github.com`,
+        `"${target}" site:gitlab.com`,
+        `"${target}" site:stackoverflow.com/users`,
+        `"${target}" site:dev.to/@`,
+        `"${target}" site:medium.com/@`,
+        `"${target}" site:hashnode.com/@`,
+        `"${target}" site:producthunt.com/@`,
+        
+        // Leaks and pastes
+        `"${target}" site:pastebin.com`,
+        `"${target}" site:ghostbin.com`,
+        `"${target}" site:rentry.co`,
+        `"${target}" site:0bin.net`,
+        `"${target}" site:dpaste.com`,
+        `"${target}" site:ideone.com`,
+        `"${target}" "pastebin" "password"`,
+        `"${target}" site:haveibeenpwned.com`,
+        
+        // Contact information
+        `"${target}" "email" OR "e-mail"`,
+        `"${target}" "phone" OR "contact"`,
+        `"${target}" "address"`,
+        `"${target}" "whatsapp"`,
+        `"${target}" "telegram"`,
+        
+        // Documents and files
+        `"${target}" filetype:pdf`,
+        `"${target}" filetype:doc OR filetype:docx`,
+        `"${target}" filetype:xls OR filetype:xlsx`,
+        `"${target}" filetype:csv`,
+        `"${target}" filetype:sql`,
+        `"${target}" filetype:json`,
+        `"${target}" filetype:xml`,
+        `"${target}" filetype:txt`,
+        `"${target}" "resume" OR "cv" filetype:pdf`,
+        `"${target}" "portfolio" OR "profile"`,
+        
+        // Forums and communities
+        `"${target}" site:forum*`,
+        `"${target}" "forum" "profile"`,
+        `"${target}" site:discourse*`,
+        `"${target}" "joined" "member"`,
+        
+        // Professional
+        `"${target}" "portfolio" OR "works"`,
+        `"${target}" "company" OR "works at"`,
+        `"${target}" "job" OR "hiring"`,
+        `"${target}" "freelance"`,
+        `"${target}" site:upwork.com/freelancers`,
+        `"${target}" site:fiverr.com`,
+        
+        // Media
+        `"${target}" site:youtube.com/c`,
+        `"${target}" site:youtube.com/channel`,
+        `"${target}" site:vimeo.com`,
+        `"${target}" site:twitch.tv`,
+        `"${target}" site:soundcloud.com`,
+        `"${target}" site:spotify.com`,
+        
+        // Archives
+        `"${target}" site:web.archive.org`,
+        `"${target}" site:webcache.googleusercontent.com`,
+        `"${target}" "cache:"`,
+        
+        // Breaches and security
+        `"${target}" "breach" OR "leaked"`,
+        `"${target}" "database" "exposed"`,
+        `"${target}" "credentials"`,
+        
+        // Shopping/Marketplaces
+        `"${target}" site:ebay.com/usr`,
+        `"${target}" site:etsy.com/shop`,
+        `"${target}" site:amazon.com/gp/profile`,
+        
+        // Dating/Classifieds (often have real info)
+        `"${target}" site:badoo.com`,
+        `"${target}" site:okcupid.com`,
+        `"${target}" site:craigslist.org`,
+        
+        // Code sharing
+        `"${target}" site:codepen.io`,
+        `"${target}" site:jsfiddle.net`,
+        `"${target}" site:repl.it/@`,
+        `"${target}" site:glitch.com/@`,
+        `"${target}" site:codesandbox.io/u`,
+        `"${target}" site:snack.expo.dev`,
+        
+        // Security research
+        `"${target}" site:hackerone.com`,
+        `"${target}" site:bugcrowd.com`,
+        `"${target}" site:intigriti.com`,
+        `"${target}" "CVE" OR "exploit"`,
       ];
+      
+      // Combine and dedupe
+      const allDorks = [...new Set([...dorks, ...extraDorks])];
 
       // ── Source 1: Brave Search API (free, 2000 req/month, no key needed for basic) ──
       const braveKey = process.env.BRAVE_SEARCH_KEY;
@@ -3721,6 +3827,9 @@ const MODULES: OSINTModule[] = [
       return { success: entities.length > 0, data: { name: target, found: entities.length }, entities };
     },
   },
+  
+  // ---- ADVANCED MODULES (Phase 1) ----
+  ...NewModules,
 ];
 
 // ============================================================================
