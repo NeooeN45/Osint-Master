@@ -535,35 +535,69 @@ const MODULES: OSINTModule[] = [
     isAvailable: async () => true,
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `PagesJaunes reverse lookup for ${target}...` } });
-      // Scrape pagesjaunes.fr for reverse phone lookup
-      const clean = target.replace(/[\s()+\-]/g, "");
+      const entities: DeepEntity[] = [];
+      let pageLoaded = false;
+      
       try {
+        const clean = target.replace(/[\s()+\-]/g, "");
         const resp = await axios.get(`https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${clean}`, {
           timeout: 15000,
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+          headers: { 
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9",
+            "Accept": "text/html,application/xhtml+xml"
+          },
+          validateStatus: () => true,
         });
+        
+        pageLoaded = resp.status === 200;
         const html = resp.data as string;
-        const entities: DeepEntity[] = [];
-        // Extract names
-        const names = html.match(/class="denomination-links"[^>]*>([^<]+)/g) || [];
-        for (const n of names.slice(0, 5)) {
-          const name = n.replace(/class="denomination-links"[^>]*>/, "").trim();
-          if (name.length > 2) {
-            entities.push({ id: makeEntityId(), type: "person", value: name, source: "pagesjaunes", confidence: 75, metadata: { phone: target }, verified: false, depth: 0 });
+        
+        // Check if we got blocked
+        if (html.includes("captcha") || html.includes("robot") || html.includes("bloqué")) {
+          emit({ type: "log", data: { message: "PagesJaunes: Blocked by anti-bot" } });
+        } else {
+          // Improved regex patterns for extracting data
+          // Pattern 1: denomination links
+          const nameMatches = html.match(/class="[^"]*denomination[^"]*"[^>]*>([^<]+)/gi) || [];
+          for (const match of nameMatches.slice(0, 5)) {
+            const name = match.replace(/<[^>]+>/g, "").trim();
+            if (name && name.length > 2 && !name.includes("PagesJaunes")) {
+              entities.push({ 
+                id: makeEntityId(), type: "person", value: name, 
+                source: "pagesjaunes", confidence: 75, metadata: { phone: target }, 
+                verified: false, depth: 0 
+              });
+            }
+          }
+          
+          // Pattern 2: address data
+          const addrMatches = html.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)/gi) || [];
+          for (const match of addrMatches.slice(0, 5)) {
+            const addr = match.replace(/<[^>]+>/g, "").trim();
+            if (addr && addr.length > 5) {
+              entities.push({ 
+                id: makeEntityId(), type: "location", value: addr, 
+                source: "pagesjaunes", confidence: 70, metadata: { phone: target }, 
+                verified: false, depth: 0 
+              });
+            }
+          }
+          
+          // Pattern 3: Generic text extraction (fallback)
+          if (entities.length === 0) {
+            const titleMatch = html.match(/<title>([^<]+)/i);
+            if (titleMatch && !titleMatch[1].includes("erreur")) {
+              emit({ type: "log", data: { message: `PagesJaunes loaded: ${titleMatch[1].slice(0, 60)}` } });
+            }
           }
         }
-        // Extract addresses
-        const addresses = html.match(/class="address-container"[^>]*>([^<]+)/g) || [];
-        for (const a of addresses.slice(0, 5)) {
-          const addr = a.replace(/class="address-container"[^>]*>/, "").trim();
-          if (addr.length > 5) {
-            entities.push({ id: makeEntityId(), type: "location", value: addr, source: "pagesjaunes", confidence: 70, metadata: { phone: target }, verified: false, depth: 0 });
-          }
-        }
-        return { success: entities.length > 0, data: { results: entities.length }, entities };
-      } catch {
-        return { success: false, data: null, entities: [] };
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `PagesJaunes error: ${e.message}` } });
       }
+      
+      // Success if page was loaded (even if no results)
+      return { success: pageLoaded, data: { phone: target, results: entities.length }, entities };
     },
   },
 
@@ -3520,7 +3554,9 @@ const MODULES: OSINTModule[] = [
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `French directory search for ${target}...` } });
       const entities: DeepEntity[] = [];
+      let pageLoaded = false;
       const isPhone = /\+?[\d\s()-]{7,}/.test(target);
+      
       try {
         // Pages Blanches
         const query = isPhone ? target.replace(/[\s()+\-]/g, "") : encodeURIComponent(target);
@@ -3529,28 +3565,48 @@ const MODULES: OSINTModule[] = [
           : `https://www.pagesblanches.fr/annuaire/recherche?quoiqui=${encodeURIComponent(target)}&ou=france`;
         const resp = await axios.get(url, {
           timeout: 10000,
-          headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+          headers: { 
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9"
+          },
+          validateStatus: () => true,
         });
+        
+        pageLoaded = resp.status === 200;
         const html = resp.data as string;
-        // Extract names
-        const nameMatches = [...html.matchAll(/class="[^"]*denomination[^"]*"[^>]*>([^<]+)/g)];
-        for (const m of nameMatches.slice(0, 5)) {
-          const name = m[1].trim();
-          if (name.length > 2 && !name.includes("<")) entities.push({ id: makeEntityId(), type: "person", value: name, source: "annuaires_fr", confidence: 75, metadata: { query: target, source: "pagesblanches" }, verified: false, depth: 0 });
+        
+        // Check for blocking
+        if (html.includes("captcha") || html.includes("robot")) {
+          emit({ type: "log", data: { message: "Annuaires FR: Blocked by anti-bot" } });
+        } else {
+          // Extract names
+          const nameMatches = [...html.matchAll(/class="[^"]*denomination[^"]*"[^>]*>([^<]+)/gi)];
+          for (const m of nameMatches.slice(0, 5)) {
+            const name = m[1].trim();
+            if (name.length > 2 && !name.includes("<")) {
+              entities.push({ id: makeEntityId(), type: "person", value: name, source: "annuaires_fr", confidence: 75, metadata: { query: target, source: "pagesblanches" }, verified: false, depth: 0 });
+            }
+          }
+          // Extract addresses
+          const addrMatches = [...html.matchAll(/class="[^"]*address[^"]*"[^>]*>([^<]+)/gi)];
+          for (const m of addrMatches.slice(0, 5)) {
+            const addr = m[1].trim();
+            if (addr.length > 5 && /\d/.test(addr)) {
+              entities.push({ id: makeEntityId(), type: "location", value: addr, source: "annuaires_fr", confidence: 70, metadata: { query: target }, verified: false, depth: 0 });
+            }
+          }
+          // Extract phones
+          const phoneMatches = [...html.matchAll(/\b0[1-9](?:[\s.-]?\d{2}){4}\b/g)];
+          for (const m of [...new Set(phoneMatches.map(m => m[0]))].slice(0, 3)) {
+            entities.push({ id: makeEntityId(), type: "phone", value: m, source: "annuaires_fr", confidence: 80, metadata: { query: target }, verified: false, depth: 0 });
+          }
         }
-        // Extract addresses
-        const addrMatches = [...html.matchAll(/class="[^"]*address[^"]*"[^>]*>([^<]+)/g)];
-        for (const m of addrMatches.slice(0, 5)) {
-          const addr = m[1].trim();
-          if (addr.length > 5 && /\d/.test(addr)) entities.push({ id: makeEntityId(), type: "location", value: addr, source: "annuaires_fr", confidence: 70, metadata: { query: target }, verified: false, depth: 0 });
-        }
-        // Extract phones
-        const phoneMatches = [...html.matchAll(/\b0[1-9](?:[\s.-]?\d{2}){4}\b/g)];
-        for (const m of [...new Set(phoneMatches.map(m => m[0]))].slice(0, 3)) {
-          entities.push({ id: makeEntityId(), type: "phone", value: m, source: "annuaires_fr", confidence: 80, metadata: { query: target }, verified: false, depth: 0 });
-        }
-      } catch {}
-      return { success: entities.length > 0, data: { target, found: entities.length }, entities };
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `Annuaires FR error: ${e.message}` } });
+      }
+      
+      // Success if page was loaded (even if no results)
+      return { success: pageLoaded, data: { target, found: entities.length }, entities };
     },
   },
 
