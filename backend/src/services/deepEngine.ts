@@ -4111,10 +4111,13 @@ export class DeepInvestigationEngine extends EventEmitter {
     
     // Track co-discovered counts per source to prevent overwhelming correlations
     const coDiscoveredCount: Record<string, number> = {};
-    const MAX_CO_DISCOVERED_PER_SOURCE = 3;
+    const MAX_CO_DISCOVERED_PER_SOURCE = 2;
+    const MAX_TOTAL_CORRELATIONS = 15; // Global limit
+    let totalCorrelations = 0;
 
     for (let i = 0; i < entityList.length; i++) {
       for (let j = i + 1; j < entityList.length; j++) {
+        if (totalCorrelations >= MAX_TOTAL_CORRELATIONS) break;
         const a = entityList[i], b = entityList[j];
         const key = `${a.id}:${b.id}`;
         if (seen.has(key)) continue;
@@ -4166,6 +4169,7 @@ export class DeepInvestigationEngine extends EventEmitter {
             id: `c_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
             from: a.id, to: b.id, type: corrType, strength, evidence, source: "correlation_engine",
           });
+          totalCorrelations++;
         }
       }
     }
