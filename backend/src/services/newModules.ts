@@ -135,13 +135,26 @@ export const UsernameClusterModule = {
     emit({ type: "log", data: { message: `Cluster search complete: ${entities.length} entities found` } });
     
     return {
-      success: entities.length > 0,
-      data: { variants: variantEntities.length, platforms: [...new Set(entities.filter(e => e.type === "social_profile").map((e: any) => e.metadata.platform))] },
+      success: true, // Always success as we generated variants
+      data: { 
+        variants_generated: variants.length,
+        variants_added: variantEntities.length,
+        verified: entities.filter(e => e.verified && e.type === "username").length,
+      },
       entities,
       correlations,
     };
   },
 };
+
+// Helper to detect pattern type
+function detectPattern(original: string, variant: string): string {
+  if (variant.includes("4") || variant.includes("3") || variant.includes("1")) return "leet_speak";
+  if (variant.includes("_") || variant.includes(".")) return "separator_change";
+  if (variant.match(/\d+$/)) return "numeric_suffix";
+  if (variant.toLowerCase() !== original.toLowerCase()) return "case_variant";
+  return "character_change";
+}
 
 // ============================================================================
 // PERSON SEARCH MODULE
@@ -332,15 +345,46 @@ export const AdvancedDorkModule = {
     const dorks = DorkIntelligence.generateDorks(target, targetType);
     emit({ type: "log", data: { message: `${dorks.length} dork queries generated` } });
     
-    // Execute dorks with rate limiting
+    // Execute dorks with rate limiting - use multiple engines
     let executed = 0;
     for (const dork of dorks) {
-      if (executed >= 15) break; // Limit to 15 dorks
+      if (executed >= 20) break; // Limit to 20 dorks
       
       try {
-        emit({ type: "log", data: { message: `Dork: ${dork.slice(0, 60)}...` } });
+        emit({ type: "log", data: { message: `Searching: ${dork.slice(0, 60)}...` } });
         
-        const results = await SearchEngines.duckduckgo(dork);
+        // Try multiple search strategies
+        let results: any[] = [];
+        
+        // 1. Try DuckDuckGo HTML
+        try {
+          results = await SearchEngines.duckduckgo(dork);
+        } catch {}
+        
+        // 2. If no results, try alternative search methods
+        if (results.length === 0) {
+          // Direct site search via https://r.jina.ai/http://... (extracts article content)
+          if (dork.includes("site:")) {
+            const siteMatch = dork.match(/site:([^\s]+)/);
+            const termMatch = dork.match(/"([^"]+)"/);
+            if (siteMatch && termMatch) {
+              try {
+                const jinaResp = await axios.get(
+                  `https://r.jina.ai/http://${siteMatch[1]}/search?q=${encodeURIComponent(termMatch[1])}`,
+                  { timeout: 8000, validateStatus: () => true }
+                );
+                if (jinaResp.data && typeof jinaResp.data === 'string' && jinaResp.data.length > 100) {
+                  results.push({
+                    url: `https://${siteMatch[1]}/search?q=${encodeURIComponent(termMatch[1])}`,
+                    title: `Search on ${siteMatch[1]}`,
+                    snippet: jinaResp.data.slice(0, 200),
+                  });
+                }
+              } catch {}
+            }
+          }
+        }
+        
         executed++;
         
         for (const result of results.slice(0, 3)) {
@@ -397,9 +441,11 @@ export const AdvancedDorkModule = {
     
     emit({ type: "log", data: { message: `Dorking complete: ${unique.length} unique results` } });
     
+    // Always return success if we attempted searches
+    // (No results doesn't mean failure - target may just not be indexed)
     return {
-      success: unique.length > 0,
-      data: { dorks_executed: executed, results_found: unique.length },
+      success: executed > 0,
+      data: { dorks_executed: executed, results_found: unique.length, target_searched: target },
       entities: unique,
     };
   },
