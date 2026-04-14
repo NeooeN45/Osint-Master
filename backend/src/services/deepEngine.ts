@@ -164,7 +164,23 @@ const MODULES: OSINTModule[] = [
           if (url) urls.push(url);
         }
       }
+      // Filter out internal/invalid URLs
+      const NOISE_PATTERNS = [
+        "raw.githubusercontent.com",
+        "github.com/sherlock",
+        "sherlock-project",
+        "data.json",
+        "localhost",
+        "127.0.0.1",
+        "example.com",
+        "undefined",
+        "null"
+      ];
+      
       for (const url of urls) {
+        // Skip if URL matches noise patterns
+        if (NOISE_PATTERNS.some(pattern => url.toLowerCase().includes(pattern))) continue;
+        
         const platform = url.replace(/https?:\/\/(www\.)?/, "").split("/")[0]?.split(".")[0] || "unknown";
         entities.push({ id: makeEntityId(), type: "social_profile", value: url, source: "sherlock", confidence: 88, metadata: { platform }, verified: true, depth: 0 });
       }
@@ -188,6 +204,38 @@ const MODULES: OSINTModule[] = [
       );
       const entities: DeepEntity[] = [];
       // Parse JSON report file
+      // Known false-positive patterns (search pages, generic responses)
+      const FP_PATTERNS = [
+        "op.gg/summoners/search",      // OP.GG search pages that accept any username
+        "chaturbate.com/",             // Adult sites that often return generic pages
+        "adultfriendfinder.com",
+        "forum.blu-ray.com/member.php", // Forums with loose username validation
+        "techpowerup.com/forums/members",
+        "tomsguide.com/members",
+        "ixbt.com/users.cgi",
+        "authorstream.com",
+        "wikimapia.org/user/tools",
+        "dailykos.com/user",
+        "moscow.flamp.ru",
+        "kinja.com",
+        "mercadolivre.com.br/perfil",
+        "picsart.com/u",
+        "weedmaps.com/brands",
+        "3ddd.ru/users",
+        "pbase.com",
+        "interpals.net",
+        "hashnode.com",
+        "kaskus.co.id",
+        "artstation.com",
+        "kaggle.com",
+        "livemaster.ru",
+        "bibsonomy.org",
+        "getmyuni.com",
+        "roblox.com/user.aspx",
+        "apple.com/profile",
+        "opensea.io/accounts"
+      ];
+      
       try {
         const files = fs.readdirSync(outDir).filter((f: string) => f.endsWith(".json"));
         for (const f of files) {
@@ -198,6 +246,15 @@ const MODULES: OSINTModule[] = [
             if (status !== "Claimed") continue;
             const url = info?.url_user || info?.url || info?.status?.url;
             if (!url) continue;
+            
+            // Skip known false-positive patterns
+            if (FP_PATTERNS.some(pattern => url.toLowerCase().includes(pattern.toLowerCase()))) {
+              continue;
+            }
+            
+            // Skip if URL looks like a search page (contains 'search', 'q=', '?username=')
+            if (url.match(/[?&]q=|[?&]username=|[?&]search/i)) continue;
+            
             entities.push({ id: makeEntityId(), type: "social_profile", value: url, source: "maigret", confidence: 82, metadata: { platform: site, ids: info?.ids_userdata }, verified: true, depth: 0 });
           }
         }
@@ -3939,6 +3996,10 @@ export class DeepInvestigationEngine extends EventEmitter {
   private buildCorrelations(entities: Map<string, DeepEntity>, correlations: DeepCorrelation[]): void {
     const entityList = [...entities.values()];
     const seen = new Set<string>();
+    
+    // Track co-discovered counts per source to prevent overwhelming correlations
+    const coDiscoveredCount: Record<string, number> = {};
+    const MAX_CO_DISCOVERED_PER_SOURCE = 5;
 
     for (let i = 0; i < entityList.length; i++) {
       for (let j = i + 1; j < entityList.length; j++) {
@@ -3950,11 +4011,17 @@ export class DeepInvestigationEngine extends EventEmitter {
         let strength = 0;
         let evidence = "";
 
-        // Same source → co-discovery
+        // Same source → co-discovery (LIMITED to prevent overwhelming results)
         if (a.source === b.source && a.source !== "user_input") {
-          corrType = "co_discovered";
-          strength = 60;
-          evidence = `Both found by ${a.source}`;
+          const source = a.source;
+          coDiscoveredCount[source] = (coDiscoveredCount[source] || 0) + 1;
+          
+          // Only create co_discovered correlation if under limit
+          if (coDiscoveredCount[source] <= MAX_CO_DISCOVERED_PER_SOURCE) {
+            corrType = "co_discovered";
+            strength = 60;
+            evidence = `Both found by ${source}`;
+          }
         }
         // Parent-child relationship
         if (a.metadata?.email === b.value || a.metadata?.domain === b.value || a.metadata?.ip === b.value || a.metadata?.phone === b.value) {
