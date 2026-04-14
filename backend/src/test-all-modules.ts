@@ -5,14 +5,9 @@
 
 import { deepEngine, detectTargetType } from "./services/deepEngine";
 
-// Test targets
-const TEST_TARGETS = {
-  username: "mag.-3110",
-  email: "john.smith@example.com",
-  person: "John Smith",
-  phone: "+33612345678",
-  domain: "example.com",
-};
+// Get target from command line or use default
+const USER_TARGET = process.argv[2] || "mag.-3110";
+const TARGET_TYPE = detectTargetType(USER_TARGET);
 
 interface TestResult {
   id: string;
@@ -31,8 +26,9 @@ interface TestResult {
 
 async function testAllModules() {
   console.log("\n" + "=".repeat(80));
-  console.log("🔍 OSINT MASTER PRO - COMPREHENSIVE MODULE TESTING");
-  console.log("=".repeat(80) + "\n");
+  console.log("🔍 OSINT MASTER PRO - MODULE TESTING");
+  console.log("=".repeat(80));
+  console.log(`\n🎯 TARGET: ${USER_TARGET} (type: ${TARGET_TYPE})\n`);
 
   // Initialize engine
   await deepEngine.init();
@@ -69,24 +65,38 @@ async function testAllModules() {
   const results: TestResult[] = [];
   
   for (const mod of modules.filter(m => m.available)) {
-    // Determine best test target
-    let testTarget = TEST_TARGETS.username;
-    if (mod.targetTypes.includes("email")) testTarget = TEST_TARGETS.email;
-    else if (mod.targetTypes.includes("person")) testTarget = TEST_TARGETS.person;
-    else if (mod.targetTypes.includes("phone")) testTarget = TEST_TARGETS.phone;
-    else if (mod.targetTypes.includes("domain")) testTarget = TEST_TARGETS.domain;
-
+    // Check if this module supports the target type
+    const supportsTarget = mod.targetTypes.includes(TARGET_TYPE);
+    
     const logs: string[] = [];
     const start = Date.now();
     
     console.log(`\n${"─".repeat(80)}`);
     console.log(`🔧 Testing: ${mod.name} (${mod.id})`);
-    console.log(`🎯 Target: ${testTarget} (${mod.targetTypes.join(", ")})`);
+    console.log(`🎯 Target: ${USER_TARGET} (supports: ${mod.targetTypes.join(", ")}) ${supportsTarget ? "✅" : "❌ SKIP"}`);
     console.log(`${"─".repeat(80)}`);
+    
+    // Skip modules that don't support this target type
+    if (!supportsTarget) {
+      console.log(`  ⏭️  Skipped - module doesn't support ${TARGET_TYPE}`);
+      results.push({
+        id: mod.id,
+        name: mod.name,
+        category: mod.category,
+        available: true,
+        success: false,
+        entitiesFound: 0,
+        correlationsFound: 0,
+        duration: 0,
+        logs: [`Skipped - doesn't support ${TARGET_TYPE}`],
+        error: `Incompatible target type: ${TARGET_TYPE}`,
+      });
+      continue;
+    }
     
     try {
       // Run module with timeout
-      const generator = deepEngine.investigate(testTarget, {
+      const generator = deepEngine.investigate(USER_TARGET, {
         maxDepth: 0,
         maxEntities: 100,
         timeoutMs: 60000,

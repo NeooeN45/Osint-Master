@@ -4354,10 +4354,14 @@ export class DeepInvestigationEngine extends EventEmitter {
           strength = 85;
           evidence = `${b.type} derived from ${a.type}`;
         }
-        // Same domain emails
+        // Same domain emails (skip if artificially generated)
         if (a.type === "email" && b.type === "email") {
-          const da = a.value.split("@")[1], db = b.value.split("@")[1];
-          if (da === db) { corrType = "same_domain"; strength = 70; evidence = `Same email domain: ${da}`; }
+          const isArtificialA = a.metadata?.artificial || a.metadata?.generated;
+          const isArtificialB = b.metadata?.artificial || b.metadata?.generated;
+          if (!isArtificialA && !isArtificialB) {
+            const da = a.value.split("@")[1], db = b.value.split("@")[1];
+            if (da === db) { corrType = "same_domain"; strength = 70; evidence = `Same email domain: ${da}`; }
+          }
         }
         // IP and domain on same infrastructure
         if ((a.type === "ip" && b.type === "domain") || (a.type === "domain" && b.type === "ip")) {
