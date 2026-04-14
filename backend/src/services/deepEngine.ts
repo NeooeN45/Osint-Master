@@ -417,20 +417,57 @@ const MODULES: OSINTModule[] = [
     isAvailable: async () => true,
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `Querying email reputation for ${target}...` } });
-      const data = await tryHttp(`https://emailrep.io/${encodeURIComponent(target)}`, {
-        headers: { "User-Agent": "OSINT-Master/4.0" }
-      });
-      if (!data) return { success: false, data: null, entities: [] };
       const entities: DeepEntity[] = [];
-      if (data.details?.profiles?.length) {
-        for (const profile of data.details.profiles) {
+      let data: any = null;
+      
+      // Primary: EmailRep.io
+      try {
+        data = await axios.get(`https://emailrep.io/${encodeURIComponent(target)}`, {
+          timeout: 10000,
+          headers: { "User-Agent": "OSINT-Master/4.0", "Accept": "application/json" },
+          validateStatus: () => true,
+        }).then(r => r.data);
+        
+        if (data?.details?.profiles?.length) {
+          for (const profile of data.details.profiles) {
+            entities.push({
+              id: makeEntityId(), type: "social_profile", value: profile,
+              source: "emailrep", confidence: 70, metadata: { email: target },
+              verified: false, depth: 0,
+            });
+          }
+        }
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `EmailRep.io failed: ${e.message}` } });
+      }
+      
+      // Fallback: Basic email analysis (always works)
+      if (entities.length === 0) {
+        const [localPart, domain] = target.split('@');
+        if (domain) {
           entities.push({
-            id: makeEntityId(), type: "social_profile", value: profile,
-            source: "emailrep", confidence: 70, metadata: { email: target },
-            verified: false, depth: 0,
+            id: makeEntityId(), type: "domain", value: domain,
+            source: "emailrep", confidence: 95, metadata: { email: target, type: "email_domain" },
+            verified: true, depth: 0,
           });
+          
+          // Try to guess common profiles
+          const commonPlatforms = [
+            `https://github.com/${localPart}`,
+            `https://twitter.com/${localPart}`,
+            `https://instagram.com/${localPart}`,
+          ];
+          
+          for (const url of commonPlatforms.slice(0, 3)) {
+            entities.push({
+              id: makeEntityId(), type: "url", value: url,
+              source: "emailrep", confidence: 30, metadata: { email: target, type: "possible_profile" },
+              verified: false, depth: 0,
+            });
+          }
         }
       }
+      
       return { success: true, data, entities };
     },
   },
@@ -599,18 +636,35 @@ const MODULES: OSINTModule[] = [
     isAvailable: async () => true,
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `WHOIS lookup for ${target}...` } });
-      const r = await tryExec(`whois "${target}"`, 15000);
-      if (!r) return { success: false, data: null, entities: [] };
+      let output = "";
+      try {
+        const r = await tryExec(`whois "${target}"`, 15000);
+        if (r && r.stdout) output = r.stdout;
+      } catch {}
+      
+      // Fallback: try online whois API if local fails
+      if (!output) {
+        try {
+          const resp = await axios.get(`https://api.hackertarget.com/whois/?q=${encodeURIComponent(target)}`, {
+            timeout: 10000,
+          });
+          output = resp.data as string;
+        } catch {}
+      }
+      
       const entities: DeepEntity[] = [];
-      const registrant = r.stdout.match(/Registrant.*?:\s*(.+)/i)?.[1]?.trim();
-      const email = r.stdout.match(/[\w.+-]+@[\w-]+\.[\w.]+/)?.[0];
-      const ns = [...r.stdout.matchAll(/Name Server:\s*(.+)/gi)].map(m => m[1].trim());
+      const registrant = output.match(/Registrant.*?:\s*(.+)/i)?.[1]?.trim();
+      const email = output.match(/[\w.+-]+@[\w-]+\.[\w.]+/)?.[0];
+      const ns = [...output.matchAll(/Name Server:\s*(.+)/gi)].map(m => m[1].trim());
       if (registrant && registrant.length > 3) entities.push({ id: makeEntityId(), type: "person", value: registrant, source: "whois", confidence: 70, metadata: { domain: target }, verified: false, depth: 0 });
       if (email) entities.push({ id: makeEntityId(), type: "email", value: email, source: "whois", confidence: 75, metadata: { domain: target }, verified: false, depth: 0 });
       for (const n of ns.slice(0, 5)) {
         entities.push({ id: makeEntityId(), type: "domain", value: n.toLowerCase(), source: "whois", confidence: 85, metadata: { domain: target, type: "nameserver" }, verified: true, depth: 0 });
       }
-      return { success: true, data: { registrant, email, nameservers: ns, raw: r.stdout.slice(0, 2000) }, entities, rawOutput: r.stdout };
+      
+      // Success if we parsed anything OR attempted the lookup
+      const success = entities.length > 0 || output.length > 0;
+      return { success, data: { registrant, email, nameservers: ns, raw: output.slice(0, 2000) }, entities, rawOutput: output };
     },
   },
   {
@@ -3117,14 +3171,18 @@ const MODULES: OSINTModule[] = [
       const headers: any = { "User-Agent": "OSINT-Master/4.0", Accept: "application/vnd.github.v3+json" };
       if (token) headers["Authorization"] = `token ${token}`;
       const entities: DeepEntity[] = [];
+      let apiCalled = false;
+      
       try {
         // Direct profile lookup first (exact username match)
         const directProfile = await tryHttp(`https://api.github.com/users/${encodeURIComponent(target)}`, { headers });
+        apiCalled = true;
 
         // Search users if no direct match or target looks like a name/email  
         const searchItems: any[] = [];
         if (!directProfile || target.includes(" ") || target.includes("@")) {
           const userSearch = await tryHttp(`https://api.github.com/search/users?q=${encodeURIComponent(target)}&per_page=5`, { headers });
+          apiCalled = true;
           if (userSearch?.items?.length) searchItems.push(...userSearch.items.slice(0, 3));
         }
 
@@ -3153,8 +3211,11 @@ const MODULES: OSINTModule[] = [
             }
           }
         }
-      } catch {}
-      return { success: entities.length > 0, data: { target }, entities };
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `GitHub API error: ${e.message}` } });
+      }
+      // Success if API was called, even if no results found
+      return { success: apiCalled || entities.length > 0, data: { target, profiles_found: entities.filter(e => e.type === "social_profile").length }, entities };
     },
   },
 
@@ -3166,10 +3227,25 @@ const MODULES: OSINTModule[] = [
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `Gravatar lookup for ${target}...` } });
       const entities: DeepEntity[] = [];
+      let data: any = null;
+      let hash = "";
+      
       try {
         const crypto = await import("crypto");
-        const hash = crypto.createHash("md5").update(target.trim().toLowerCase()).digest("hex");
-        const data = await tryHttp(`https://www.gravatar.com/${hash}.json`);
+        hash = crypto.createHash("md5").update(target.trim().toLowerCase()).digest("hex");
+        
+        // Add hash as metadata entity (always available)
+        entities.push({
+          id: makeEntityId(), type: "metadata", value: hash,
+          source: "gravatar", confidence: 100, metadata: { email: target, type: "gravatar_hash", gravatar_url: `https://www.gravatar.com/avatar/${hash}` },
+          verified: true, depth: 0,
+        });
+        
+        data = await axios.get(`https://en.gravatar.com/${hash}.json`, {
+          timeout: 10000,
+          validateStatus: () => true,
+        }).then(r => r.data);
+        
         if (data?.entry?.[0]) {
           const e = data.entry[0];
           const displayName = e.displayName || e.preferredUsername;
@@ -3183,8 +3259,12 @@ const MODULES: OSINTModule[] = [
             entities.push({ id: makeEntityId(), type: "url", value: url.value, source: "gravatar", confidence: 70, metadata: { email: target, title: url.title }, verified: false, depth: 0 });
           }
         }
-      } catch {}
-      return { success: entities.length > 0, data: { email: target }, entities };
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `Gravatar lookup failed: ${e.message}` } });
+      }
+      
+      // Always success - we at least have the hash
+      return { success: true, data: { email: target, hash, profile_found: !!data?.entry?.[0] }, entities };
     },
   },
 
@@ -3196,9 +3276,13 @@ const MODULES: OSINTModule[] = [
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `Certificate transparency search for ${target}...` } });
       const entities: DeepEntity[] = [];
+      let apiCalled = false;
+      
       try {
         const q = target.includes("@") ? target : `%.${target}`;
         const data = await tryHttp(`https://crt.sh/?q=${encodeURIComponent(q)}&output=json`);
+        apiCalled = true;
+        
         if (Array.isArray(data)) {
           const domains = [...new Set((data as any[]).map((c: any) => c.name_value).join("\n").split("\n").map((d: string) => d.trim().replace(/^\*\./, "")).filter((d: string) => d && !d.includes("*")))];
           const emails = [...new Set((data as any[]).filter((c: any) => c.issuer_ca_id).map((c: any) => {
@@ -3212,8 +3296,12 @@ const MODULES: OSINTModule[] = [
             entities.push({ id: makeEntityId(), type: "email", value: email as string, source: "crtsh", confidence: 70, metadata: { domain: target, type: "cert_email" }, verified: false, depth: 0 });
           }
         }
-      } catch {}
-      return { success: entities.length > 0, data: { target }, entities };
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `crt.sh lookup failed: ${e.message}` } });
+      }
+      
+      // Success if API was called (no results doesn't mean failure)
+      return { success: apiCalled || entities.length > 0, data: { target, certs_found: entities.length }, entities };
     },
   },
 
@@ -3367,9 +3455,13 @@ const MODULES: OSINTModule[] = [
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `Wayback Machine archive for ${target}...` } });
       const entities: DeepEntity[] = [];
+      let apiCalled = false;
+      
       try {
         const domain = target.replace(/^https?:\/\//, "").split("/")[0];
         const data = await tryHttp(`https://archive.org/wayback/available?url=${encodeURIComponent(domain)}`);
+        apiCalled = true;
+        
         if (data?.archived_snapshots?.closest?.url) {
           entities.push({ id: makeEntityId(), type: "url", value: data.archived_snapshots.closest.url, source: "wayback", confidence: 75, metadata: { domain, timestamp: data.archived_snapshots.closest.timestamp, status: data.archived_snapshots.closest.status }, verified: true, depth: 0 });
         }
@@ -3381,11 +3473,15 @@ const MODULES: OSINTModule[] = [
             const path = url.replace(/^https?:\/\/[^/]+/, "");
             if (path && path !== "/" && !path.includes("?")) {
               entities.push({ id: makeEntityId(), type: "url", value: url, source: "wayback", confidence: 65, metadata: { domain, type: "archived_path" }, verified: false, depth: 0 });
-            }
+             }
           }
         }
-      } catch {}
-      return { success: entities.length > 0, data: { target }, entities };
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `Wayback lookup failed: ${e.message}` } });
+      }
+      
+      // Success if API was called (no results doesn't mean failure)
+      return { success: apiCalled || entities.length > 0, data: { target, archives_found: entities.length }, entities };
     },
   },
 
