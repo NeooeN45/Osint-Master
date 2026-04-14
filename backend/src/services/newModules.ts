@@ -96,7 +96,7 @@ export const UsernameClusterModule = {
             timeout: 5000,
             validateStatus: () => true,
             headers: { "User-Agent": "Mozilla/5.0", ...(p.headers || {}) },
-          });
+          } as any);
           
           const found = p.htmlCheck 
             ? p.htmlCheck(resp.data as string)
@@ -407,7 +407,7 @@ export const AdvancedDorkModule = {
               try {
                 const jinaResp = await axios.get(
                   `https://r.jina.ai/http://${siteMatch[1]}/search?q=${encodeURIComponent(termMatch[1])}`,
-                  { timeout: 8000, validateStatus: () => true }
+                  { timeout: 8000, validateStatus: () => true } as any
                 );
                 if (jinaResp.data && typeof jinaResp.data === 'string' && jinaResp.data.length > 100) {
                   results.push({
@@ -517,7 +517,7 @@ export const HunterModule = {
           { timeout: 15000 }
         );
         
-        const emails = resp.data?.data?.emails || [];
+        const emails = (resp.data as any)?.data?.emails || [];
         emit({ type: "log", data: { message: `Found ${emails.length} emails on Hunter.io` } });
         
         for (const email of emails) {
@@ -562,7 +562,7 @@ export const HunterModule = {
         const parts = target.split(/\s+/);
         if (parts.length >= 2) {
           // Try to find associated domain from existing entities
-          const domains = []; // Would come from context
+          const domains: string[] = []; // Would come from context
           
           for (const domain of domains.slice(0, 3)) {
             try {
@@ -621,7 +621,11 @@ export const IntelXModule = {
     emit({ type: "log", data: { message: `Searching Intelligence X for ${target}...` } });
     
     const entities: any[] = [];
-    const key = process.env.INTELX_API_KEY;
+    const key = process.env.INTELX_API_KEY || "";
+    
+    if (!key) {
+      return { success: false, data: { error: "No API key" }, entities: [] };
+    }
     
     try {
       // Start search
@@ -651,7 +655,7 @@ export const IntelXModule = {
       const resultResp = await axios.get<any>(
         `https://2.intelx.io/intelligent/search/result?id=${id}&limit=100`,
         {
-          headers: { "X-Key": key },
+          headers: { "X-Key": key as string },
           timeout: 30000,
         }
       );
