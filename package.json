@@ -4,23 +4,36 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3001",
+    "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@reactflow/core": "^11.11.4",
+    "@types/leaflet": "^1.9.21",
     "clsx": "^2.1.1",
+    "exifreader": "^4.23.5",
+    "graphql-ws": "^6.0.8",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
+    "jszip": "^3.10.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "pdf-lib": "^1.17.1",
+    "pica": "^9.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "reactflow": "^11.11.4",
+    "react-leaflet": "^5.0.0",
     "react-markdown": "^10.1.0",
+    "react-resizable-panels": "^4.9.0",
     "react-syntax-highlighter": "^16.1.1",
+    "reactflow": "^11.11.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
+    "tesseract.js": "^5.0.5",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
@@ -32,6 +45,7 @@
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

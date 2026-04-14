@@ -1,0 +1,14 @@
+{
+  "tool": "SocialScan",
+  "target": "Emma Watson",
+  "success": true,
+  "output": "----------------------------------------\r\n                 Watson\r\n----------------------------------------\r\nGitLab\r\nInstagram\r\nReddit\r\nTwitter\r\n----------------------------------------\r\n                  Emma\r\n----------------------------------------\r\nGitLab\r\nInstagram\r\nReddit\r\nTwitter: Your username must be longer than 4 characters.\r\n\r\nAvailable, Taken/Reserved, Invalid, Error\r\nCompleted 16 queries in 1.53s\r\n\r  0%|                               | 0/16 [0.00s]\r 31%|#########6                     | 5/16 [0.11s]\r 62%|##################7           | 10/16 [0.28s]\r 88%|##########################2   | 14/16 [0.60s]\r                                                  \rGitHub: QueryError - Could not retrieve token. You might be sending too many requests. Use a proxy or wait before trying again.\r\nTumblr: QueryError - Could not retrieve token. You might be sending too many requests. Use a proxy or wait before trying again.\r\nGitHub: QueryError - Could not retrieve token. You might be sending too many requests. Use a proxy or wait before trying again.\r\nTumblr: QueryError - Could not retrieve token. You might be sending too many requests. Use a proxy or wait before trying again.\r\n",
+  "parsed": {
+    "results": [
+      "Available, Taken/Reserved, Invalid, Error"
+    ],
+    "count": 1
+  },
+  "duration": 3146,
+  "timestamp": "2026-04-12T11:41:48.582Z"
+}

@@ -11,10 +11,20 @@ import {
   ChevronRight,
   Target,
   Settings,
+  ScanFace,
+  FileSearch,
+  UserSearch,
+  FileText,
+  Zap,
+  Shield,
+  Instagram,
+  Globe,
+  Bell,
+  Bot,
 } from "lucide-react";
 import { useCaseStore } from "../store/useCaseStore";
 
-export type AppView = "dashboard" | "graph" | "chat" | "tools" | "timeline" | "cases";
+export type AppView = "dashboard" | "graph" | "chat" | "tools" | "timeline" | "images" | "documents" | "profiling" | "reports" | "framework" | "darkweb" | "social" | "network" | "monitoring" | "geolocation" | "ai" | "google" | "cases";
 
 interface SidebarProps {
   activeView: AppView;
@@ -23,13 +33,25 @@ interface SidebarProps {
 }
 
 const NAV = [
-  { id: "dashboard" as AppView, icon: LayoutDashboard, label: "Dashboard" },
-  { id: "graph" as AppView, icon: Share2, label: "Graphe" },
-  { id: "chat" as AppView, icon: MessageSquare, label: "IA Chat" },
-  { id: "tools" as AppView, icon: Wrench, label: "Outils" },
-  { id: "timeline" as AppView, icon: Clock, label: "Timeline" },
-  { id: "cases" as AppView, icon: FolderOpen, label: "Dossiers" },
-];
+  { id: "google", label: "Google UI", icon: Globe },
+  { id: "ai", label: "AI Orchestrator", icon: Bot },
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "framework", label: "Framework OSINT", icon: Zap },
+  { id: "social", label: "Social Media Pro", icon: Instagram },
+  { id: "darkweb", label: "Dark Web Intel", icon: Shield },
+  { id: "network", label: "Network Intel", icon: Globe },
+  { id: "geolocation", label: "Precision Geo", icon: Globe },
+  { id: "monitoring", label: "Monitoring & Alerts", icon: Bell },
+  { id: "graph", label: "Relation Graph", icon: Share2 },
+  { id: "chat", label: "AI Assistant", icon: MessageSquare },
+  { id: "images", label: "Image Analysis", icon: ScanFace },
+  { id: "documents", label: "Documents", icon: FileSearch },
+  { id: "tools", label: "Tools", icon: Wrench },
+  { id: "timeline", label: "Timeline", icon: Clock },
+  { id: "profiling", label: "Profiling", icon: UserSearch },
+  { id: "reports", label: "Reports", icon: FileText },
+  { id: "cases", label: "Cases", icon: FolderOpen },
+] as const;
 
 export default function Sidebar({ activeView, onViewChange, onOpenSettings }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);

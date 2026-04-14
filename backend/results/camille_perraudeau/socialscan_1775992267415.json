@@ -1,0 +1,14 @@
+{
+  "tool": "SocialScan",
+  "target": "camille_perraudeau",
+  "success": true,
+  "output": "----------------------------------------\r\n           camille_perraudeau\r\n----------------------------------------\r\nGitLab\r\nReddit\r\nInstagram\r\nTwitter: Your username must be shorter than 15 characters.\r\n\r\nAvailable, Taken/Reserved, Invalid, Error\r\nCompleted 8 queries in 0.60s\r\n\r  0%|                                | 0/8 [0.00s]\r 50%|################                | 4/8 [0.19s]\r 88%|############################    | 7/8 [0.48s]\r                                                  \rGitHub: QueryError - Could not retrieve token. You might be sending too many requests. Use a proxy or wait before trying again.\r\nTumblr: QueryError - Could not retrieve token. You might be sending too many requests. Use a proxy or wait before trying again.\r\n",
+  "parsed": {
+    "results": [
+      "Available, Taken/Reserved, Invalid, Error"
+    ],
+    "count": 1
+  },
+  "duration": 2149,
+  "timestamp": "2026-04-12T11:11:07.414Z"
+}

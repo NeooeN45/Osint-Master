@@ -15,6 +15,8 @@ const TYPE_ICONS: Record<EntityType, React.ComponentType<{ className?: string }>
   crypto: Shield,
   social: User,
   document: Shield,
+  image: Search,
+  face: User,
   unknown: Search,
 };
 

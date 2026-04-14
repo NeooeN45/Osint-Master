@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  # OSINT Tools Container - all tools pre-installed
+  osint-tools:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.osint-tools
+    container_name: osint-tools
+    volumes:
+      - osint-output:/osint/output
+      - osint-config:/osint/config
+    networks:
+      - osint-net
+    restart: unless-stopped
+    environment:
+      - SHODAN_API_KEY=${SHODAN_API_KEY:-}
+      - HIBP_API_KEY=${HIBP_API_KEY:-}
+      - NUMVERIFY_API_KEY=${NUMVERIFY_API_KEY:-}
+      - IPINFO_TOKEN=${IPINFO_TOKEN:-}
+      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY:-}
+
+  # Backend API
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: osint-backend
+    ports:
+      - "3002:3002"
+    volumes:
+      - osint-output:/app/output
+    networks:
+      - osint-net
+    depends_on:
+      - osint-tools
+    environment:
+      - PORT=3002
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - OSINT_CONTAINER=osint-tools
+      - SHODAN_API_KEY=${SHODAN_API_KEY:-}
+      - HIBP_API_KEY=${HIBP_API_KEY:-}
+      - NUMVERIFY_API_KEY=${NUMVERIFY_API_KEY:-}
+      - IPINFO_TOKEN=${IPINFO_TOKEN:-}
+      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  osint-output:
+  osint-config:
+
+networks:
+  osint-net:
+    driver: bridge

@@ -1,0 +1,14 @@
+{
+  "tool": "SocialScan",
+  "target": "camille_perraudeau",
+  "success": true,
+  "output": "----------------------------------------\r\n           camille_perraudeau\r\n----------------------------------------\r\nGitLab\r\nReddit\r\nInstagram\r\nTwitter: Your username must be shorter than 15 characters.\r\n\r\nAvailable, Taken/Reserved, Invalid, Error\r\nCompleted 8 queries in 1.25s\r\n",
+  "parsed": {
+    "results": [
+      "Available, Taken/Reserved, Invalid, Error"
+    ],
+    "count": 1
+  },
+  "duration": 6267,
+  "timestamp": "2026-04-12T10:32:09.744Z"
+}

@@ -1,0 +1,72 @@
+# ============================================================================
+# OSINT MASTER - Docker Image for OSINT Tools
+# Contains all pip-based and binary OSINT tools pre-installed
+# ============================================================================
+
+FROM python:3.11-slim
+
+LABEL maintainer="OSINT Master"
+LABEL description="All-in-one OSINT tools container"
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl wget whois nmap dnsutils net-tools \
+    chromium chromium-driver \
+    libimage-exiftool-perl \
+    gcc g++ make \
+    libffi-dev libssl-dev \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go tools (subfinder, httpx, dnsx, etc.)
+RUN curl -LO https://go.dev/dl/go1.22.0.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.22.0.linux-amd64.tar.gz && \
+    rm go1.22.0.linux-amd64.tar.gz
+ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}"
+
+RUN go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest && \
+    go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest && \
+    go install -v github.com/projectdiscovery/dnsx/cmd/dnsx@latest && \
+    go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+
+# Python OSINT tools
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir \
+    sherlock-project \
+    maigret \
+    holehe \
+    socialscan \
+    phoneinfoga \
+    h8mail \
+    ghunt \
+    theHarvester \
+    twint \
+    instaloader \
+    photon \
+    email-validator \
+    requests \
+    beautifulsoup4 \
+    selenium \
+    Pillow \
+    python-whois \
+    shodan \
+    censys \
+    spiderfoot
+
+# PhoneInfoga binary
+RUN curl -sSL https://raw.githubusercontent.com/sundowndev/phoneinfoga/master/support/scripts/install | bash && \
+    mv phoneinfoga /usr/local/bin/ || true
+
+# Create working directories
+RUN mkdir -p /osint/output /osint/tools /osint/config
+
+WORKDIR /osint
+
+# Health check script
+COPY docker/healthcheck.sh /osint/healthcheck.sh
+RUN chmod +x /osint/healthcheck.sh || true
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "print('ok')"
+
+# Default: keep container running for tool execution via exec
+CMD ["tail", "-f", "/dev/null"]
