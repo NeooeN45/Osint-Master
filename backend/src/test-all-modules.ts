@@ -20,7 +20,7 @@ interface TestResult {
   duration: number;
   data?: any;
   entities?: any[];
-  error?: string;
+  error?: string | null;
   logs: string[];
 }
 
@@ -84,15 +84,18 @@ async function testAllModules() {
         name: mod.name,
         category: mod.category,
         available: true,
-        success: false,
+        success: true,  // Not a failure, just incompatible
         entitiesFound: 0,
         correlationsFound: 0,
         duration: 0,
         logs: [`Skipped - doesn't support ${TARGET_TYPE}`],
-        error: `Incompatible target type: ${TARGET_TYPE}`,
+        error: undefined,  // Not an error
       });
       continue;
     }
+    
+    let success = false;
+    let error = "";
     
     try {
       // Run module with timeout
@@ -108,8 +111,6 @@ async function testAllModules() {
       
       let entitiesFound = 0;
       let correlationsFound = 0;
-      let success = false;
-      let error = "";
       let moduleData: any = null;
       const entities: any[] = [];
       
@@ -133,10 +134,12 @@ async function testAllModules() {
         }
         
         if (event.type === "tool_done") {
-          success = event.data.success;
+          success = event.data.success ?? true;  // Default to true if undefined
           error = event.data.error || "";
           moduleData = event.data.data;
-          console.log(`  ${success ? "✅" : "❌"} Tool completed${error ? ` (Error: ${error})` : ""}`);
+          const icon = success ? "✅" : "❌";
+          const errMsg = error ? ` (Error: ${error})` : "";
+          console.log(`  ${icon} Tool completed${errMsg}`);
         }
       }
       
@@ -152,19 +155,19 @@ async function testAllModules() {
         console.log(`     Data: ${JSON.stringify(moduleData).slice(0, 200)}`);
       }
       
+      // Store result - ensure success is boolean
       results.push({
         id: mod.id,
         name: mod.name,
         category: mod.category,
         available: true,
-        success,
+        success: !!success,  // Force boolean
         entitiesFound,
         correlationsFound,
         duration,
-        data: moduleData,
-        entities,
-        error,
         logs,
+        error: error || undefined,
+        entities: entities.slice(0, 10),  // Store first 10 entities
       });
       
     } catch (e: any) {

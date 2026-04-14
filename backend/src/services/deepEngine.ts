@@ -426,7 +426,7 @@ const MODULES: OSINTModule[] = [
           timeout: 10000,
           headers: { "User-Agent": "OSINT-Master/4.0", "Accept": "application/json" },
           validateStatus: () => true,
-        }).then(r => r.data);
+        } as any).then(r => r.data);
         
         if (data?.details?.profiles?.length) {
           for (const profile of data.details.profiles) {
@@ -579,7 +579,7 @@ const MODULES: OSINTModule[] = [
             "Accept": "text/html,application/xhtml+xml"
           },
           validateStatus: () => true,
-        });
+        } as any);
         
         pageLoaded = resp.status === 200;
         const html = resp.data as string;
@@ -1055,8 +1055,8 @@ const MODULES: OSINTModule[] = [
 
       // Always return success if we attempted searches, even if no results
       // This prevents false negatives when search engines block/return empty
-      const attemptedSearches = braveKey || bingKey || entities.length > 0;
-      return { success: attemptedSearches || entities.length > 0, data: { target, sources: seen.size, dorksAttempted: allDorks.length }, entities };
+      const attemptedSearches = !!(braveKey || bingKey) || entities.length > 0;
+      return { success: !!(attemptedSearches || entities.length > 0), data: { target, sources: seen.size, dorksAttempted: allDorks.length }, entities };
     },
   },
 
@@ -1241,7 +1241,7 @@ const MODULES: OSINTModule[] = [
           timeout: 10000,
           headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept-Language": "en-US,en;q=0.9" },
           validateStatus: () => true,
-        });
+        } as any);
         pageChecked = true;
         const html = resp2.data as string;
         // Extract shared_data JSON
@@ -3331,7 +3331,7 @@ const MODULES: OSINTModule[] = [
         data = await axios.get(`https://en.gravatar.com/${hash}.json`, {
           timeout: 10000,
           validateStatus: () => true,
-        }).then(r => r.data);
+        } as any).then(r => r.data);
         
         if (data?.entry?.[0]) {
           const e = data.entry[0];
@@ -3623,7 +3623,7 @@ const MODULES: OSINTModule[] = [
             "Accept-Language": "fr-FR,fr;q=0.9"
           },
           validateStatus: () => true,
-        });
+        } as any);
         
         pageLoaded = resp.status === 200;
         const html = resp.data as string;

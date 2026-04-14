@@ -499,11 +499,14 @@ export const HunterModule = {
   priority: 3,
   isAvailable: async () => !!process.env.HUNTER_API_KEY,
   
-  execute: async (target: string, emit: any, targetType: string) => {
+  execute: async (target: string, emit: any) => {
     emit({ type: "log", data: { message: `Searching Hunter.io for ${target}...` } });
     
     const entities: any[] = [];
     const key = process.env.HUNTER_API_KEY;
+    
+    // Infer target type from target value
+    const targetType = target.includes("@") ? "email" : target.includes(" ") ? "person" : "domain";
     
     try {
       if (targetType === "domain" || target.includes("@")) {
