@@ -42,8 +42,44 @@ export const UsernameClusterModule = {
     const entities: any[] = [];
     const correlations: any[] = [];
     
-    // Quick check on key platforms (parallel, limit to 30 variants)
-    const checkVariants = variants.slice(0, 30);
+    // Add original username
+    entities.push({
+      id: makeEntityId(),
+      type: "username",
+      value: target,
+      source: "username_cluster",
+      confidence: 95,
+      metadata: { type: "original", variants_count: variants.length },
+      verified: true,
+      depth: 0,
+    });
+    
+    // Add top variants as potential usernames (even without verification)
+    // These are useful for further OSINT investigation
+    const topVariants = variants.slice(1, 21); // Skip original, take next 20
+    
+    for (const variant of topVariants) {
+      entities.push({
+        id: makeEntityId(),
+        type: "username",
+        value: variant,
+        source: "username_cluster",
+        confidence: 35, // Low confidence as unverified
+        metadata: {
+          parent: target,
+          type: "variant",
+          pattern: detectPattern(target, variant),
+        },
+        verified: false,
+        depth: 0,
+      });
+    }
+    
+    emit({ type: "log", data: { message: `Added ${topVariants.length} unverified variants for investigation` } });
+    
+    // Quick verification check on key platforms (sample 5 random variants)
+    const sampleVariants = topVariants.slice(0, 5);
+    let verifiedCount = 0;
     const platforms = [
       { name: "GitHub", url: (u: string) => `https://api.github.com/users/${u}`, check: (d: any) => !!d?.login },
       { name: "Twitter", url: (u: string) => `https://api.fxtwitter.com/${u}`, check: (d: any) => !!d?.user },
@@ -53,7 +89,7 @@ export const UsernameClusterModule = {
     ];
     
     // Check each variant
-    for (const variant of checkVariants) {
+    for (const variant of sampleVariants) {
       const checks = platforms.map(async (p) => {
         try {
           const resp = await axios.get(p.url(variant), {
