@@ -1,0 +1,695 @@
+{
+  "timestamp": "2026-04-14T19:23:35.538Z",
+  "summary": {
+    "total": 37,
+    "working": 17,
+    "empty": 0,
+    "failed": 20
+  },
+  "results": [
+    {
+      "id": "sherlock",
+      "name": "Sherlock",
+      "category": "username",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 11591,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "maigret",
+      "name": "Maigret",
+      "category": "username",
+      "success": true,
+      "entitiesFound": 3,
+      "correlationsFound": 1,
+      "duration": 32659,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        },
+        {
+          "type": "social_profile",
+          "value": "https://news.ycombinator.com/user?id=mag.-3110",
+          "confidence": 82
+        },
+        {
+          "type": "social_profile",
+          "value": "http://www.hi5.com/mag.-3110",
+          "confidence": 82
+        }
+      ]
+    },
+    {
+      "id": "whatsmyname",
+      "name": "WhatsMyName",
+      "category": "username",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 3310,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "emailrep",
+      "name": "EmailRep.io",
+      "category": "email",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 331,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "h8mail",
+      "name": "H8mail",
+      "category": "email",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 12755,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "numverify",
+      "name": "NumVerify API",
+      "category": "phone",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 3,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "phone",
+          "value": "+33612345678",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "pagesjaunes",
+      "name": "PagesJaunes (FR)",
+      "category": "phone",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 367,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "person",
+          "value": "John Smith",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "ipinfo",
+      "name": "IPinfo.io",
+      "category": "ip",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 1214,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "whois",
+      "name": "WHOIS",
+      "category": "domain",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 143,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "domain",
+          "value": "example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "socialscan",
+      "name": "SocialScan",
+      "category": "person",
+      "success": true,
+      "entitiesFound": 3,
+      "correlationsFound": 1,
+      "duration": 4103,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        },
+        {
+          "type": "social_profile",
+          "value": "https://twitter.com/john.smith@example.com",
+          "confidence": 88
+        },
+        {
+          "type": "social_profile",
+          "value": "https://john.smith@example.com.tumblr.com",
+          "confidence": 88
+        }
+      ]
+    },
+    {
+      "id": "googledork",
+      "name": "Web Dorking",
+      "category": "search",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 5326,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "ghunt",
+      "name": "GHunt",
+      "category": "email",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 2986,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "theharvester",
+      "name": "theHarvester",
+      "category": "domain",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 90088,
+      "error": "Timed out after 90s",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "instagram_public",
+      "name": "Instagram Public",
+      "category": "social",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 83,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "instaloader",
+      "name": "Instaloader",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 2,
+      "correlationsFound": 0,
+      "duration": 2801,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        },
+        {
+          "type": "social_profile",
+          "value": "https://instagram.com/mag.-3110",
+          "confidence": 90
+        }
+      ]
+    },
+    {
+      "id": "instagram_contact",
+      "name": "Instagram Contact Info",
+      "category": "social",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 47,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "media_collector",
+      "name": "Media Collector (Profile Pictures)",
+      "category": "media",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 920,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "instagram_near",
+      "name": "Instagram Near (Geo)",
+      "category": "social",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 42,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "instagram_chronogram",
+      "name": "Instagram Chronogram",
+      "category": "social",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 39,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "instagram_email_check",
+      "name": "Instagram Email Check",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 100,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "twitter_public",
+      "name": "Twitter/X Public",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 730,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "reddit_public",
+      "name": "Reddit Public API",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 55,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "github_search",
+      "name": "GitHub Search",
+      "category": "social",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 170,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "gravatar",
+      "name": "Gravatar",
+      "category": "email",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 101,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "crtsh",
+      "name": "crt.sh (SSL Certs)",
+      "category": "domain",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 331,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "dns_lookup",
+      "name": "DNS Lookup",
+      "category": "domain",
+      "success": true,
+      "entitiesFound": 8,
+      "correlationsFound": 12,
+      "duration": 61,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "domain",
+          "value": "example.com",
+          "confidence": 100
+        },
+        {
+          "type": "ip",
+          "value": "104.20.23.154",
+          "confidence": 95
+        },
+        {
+          "type": "ip",
+          "value": "172.66.147.243",
+          "confidence": 95
+        }
+      ]
+    },
+    {
+      "id": "wayback",
+      "name": "Wayback Machine",
+      "category": "domain",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 687,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "domain",
+          "value": "example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "annuaires_fr",
+      "name": "Annuaires FR",
+      "category": "phone",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 280,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "person",
+          "value": "John Smith",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "snapchat_public",
+      "name": "Snapchat Public",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 55,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "telegram_lookup",
+      "name": "Telegram Lookup",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 2,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "phone",
+          "value": "+33612345678",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "tiktok_public",
+      "name": "TikTok Public",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 75,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "skype_lookup",
+      "name": "Skype Lookup",
+      "category": "social",
+      "success": true,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 244,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "paste_search",
+      "name": "Paste Search (Leaks)",
+      "category": "search",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 1010,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "person_search",
+      "name": "Person Name Search",
+      "category": "person",
+      "success": false,
+      "entitiesFound": 26,
+      "correlationsFound": 35,
+      "duration": 862,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "person",
+          "value": "John Smith",
+          "confidence": 100
+        },
+        {
+          "type": "username",
+          "value": "john.smith",
+          "confidence": 45
+        },
+        {
+          "type": "username",
+          "value": "john_smith",
+          "confidence": 45
+        }
+      ]
+    },
+    {
+      "id": "username_cluster",
+      "name": "Username Cluster Intelligence",
+      "category": "username",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 2343,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "username",
+          "value": "mag.-3110",
+          "confidence": 100
+        }
+      ]
+    },
+    {
+      "id": "person_search",
+      "name": "Person Name Search",
+      "category": "person",
+      "success": false,
+      "entitiesFound": 26,
+      "correlationsFound": 35,
+      "duration": 655,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "person",
+          "value": "John Smith",
+          "confidence": 100
+        },
+        {
+          "type": "username",
+          "value": "john.smith",
+          "confidence": 45
+        },
+        {
+          "type": "username",
+          "value": "john_smith",
+          "confidence": 45
+        }
+      ]
+    },
+    {
+      "id": "advanced_dork",
+      "name": "Advanced Web Dorking",
+      "category": "search",
+      "success": false,
+      "entitiesFound": 1,
+      "correlationsFound": 0,
+      "duration": 7687,
+      "error": "",
+      "sampleEntities": [
+        {
+          "type": "email",
+          "value": "john.smith@example.com",
+          "confidence": 100
+        }
+      ]
+    }
+  ]
+}

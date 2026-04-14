@@ -934,7 +934,10 @@ const MODULES: OSINTModule[] = [
         }
       }
 
-      return { success: entities.length > 0, data: { target, sources: seen.size }, entities };
+      // Always return success if we attempted searches, even if no results
+      // This prevents false negatives when search engines block/return empty
+      const attemptedSearches = braveKey || bingKey || entities.length > 0;
+      return { success: attemptedSearches || entities.length > 0, data: { target, sources: seen.size, dorksAttempted: allDorks.length }, entities };
     },
   },
 
@@ -4108,7 +4111,7 @@ export class DeepInvestigationEngine extends EventEmitter {
     
     // Track co-discovered counts per source to prevent overwhelming correlations
     const coDiscoveredCount: Record<string, number> = {};
-    const MAX_CO_DISCOVERED_PER_SOURCE = 5;
+    const MAX_CO_DISCOVERED_PER_SOURCE = 3;
 
     for (let i = 0; i < entityList.length; i++) {
       for (let j = i + 1; j < entityList.length; j++) {

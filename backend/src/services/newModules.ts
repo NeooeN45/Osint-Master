@@ -318,10 +318,15 @@ export const AdvancedDorkModule = {
   priority: 5,
   isAvailable: async () => true,
   
-  execute: async (target: string, emit: any, targetType: string) => {
+  execute: async (target: string, emit: any) => {
     emit({ type: "log", data: { message: `Executing advanced dorking for ${target}...` } });
     
     const entities: any[] = [];
+    
+    // Detect target type for dork generation
+    const targetType = target.includes('@') ? 'email' : 
+                      target.match(/^\d/) ? 'phone' : 
+                      target.includes(' ') ? 'person' : 'username';
     
     // Generate dorks based on target type
     const dorks = DorkIntelligence.generateDorks(target, targetType);
@@ -481,11 +486,12 @@ export const HunterModule = {
                 { timeout: 10000 }
               );
               
-              if (resp.data?.data?.email) {
+              const respData = resp.data as any;
+          if (respData?.data?.email) {
                 entities.push({
                   id: makeEntityId(),
                   type: "email",
-                  value: resp.data.data.email,
+                  value: respData.data.email,
                   source: "hunter_email",
                   confidence: 85,
                   metadata: {
@@ -549,14 +555,15 @@ export const IntelXModule = {
         }
       );
       
-      const id = searchResp.data?.id;
+      const searchData = searchResp.data as any;
+    const id: string = searchData?.id;
       if (!id) return { success: false, data: {}, entities: [] };
       
       // Wait for results
       await new Promise(r => setTimeout(r, 3000));
       
       // Get results
-      const resultResp = await axios.get(
+      const resultResp = await axios.get<any>(
         `https://2.intelx.io/intelligent/search/result?id=${id}&limit=100`,
         {
           headers: { "X-Key": key },
@@ -564,7 +571,7 @@ export const IntelXModule = {
         }
       );
       
-      const records = resultResp.data?.records || [];
+      const records = (resultResp.data as any)?.records || [];
       emit({ type: "log", data: { message: `Intelligence X found ${records.length} records` } });
       
       for (const record of records) {
