@@ -1055,8 +1055,9 @@ const MODULES: OSINTModule[] = [
 
       // Always return success if we attempted searches, even if no results
       // This prevents false negatives when search engines block/return empty
-      const attemptedSearches = !!(braveKey || bingKey) || entities.length > 0;
-      return { success: !!(attemptedSearches || entities.length > 0), data: { target, sources: seen.size, dorksAttempted: allDorks.length }, entities };
+      const attemptedSearches = !!(braveKey || bingKey);
+      const hasResults = entities.length > 0;
+      return { success: attemptedSearches || hasResults, data: { target, sources: seen.size, dorksAttempted: allDorks.length }, entities };
     },
   },
 
