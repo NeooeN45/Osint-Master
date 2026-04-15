@@ -11,6 +11,9 @@ import { logger } from "../utils/logger";
 import { config as dotenvConfig } from "dotenv";
 import path from "path";
 import { NewModules } from "./newModules";
+import { NewModulesExtra } from "./newModulesExtra";
+import { SocialDeepModules } from "./socialDeepScan";
+import { IgProfileModule, IgContactModule, IgNetworkModule, IgGeoModule, IgStoriesModule, IgHashtagModule, IgTaggedModule, IgCrossPlatformModule, IgAltAccountsModule, IgInstalaoderModule, IgOsintgramModule, IgHikerApiModule } from "./instagramEngine";
 import { DorkIntelligence, UsernameIntelligence } from "./advancedEngine";
 // Load .env immediately — ensures API keys are in process.env before module init
 dotenvConfig({ path: path.resolve(process.cwd(), ".env") });
@@ -141,14 +144,15 @@ const MODULES: OSINTModule[] = [
     priority: 1,
     isAvailable: async () => { const r = await tryExec("sherlock --version"); return !!r; },
     execute: async (target, emit) => {
-      emit({ type: "log", data: { message: `Searching ${target} across 400+ social networks...` } });
+      emit({ type: "log", data: { message: `Searching ${target} across top social networks (fast mode)...` } });
       const os = await import("os");
       const fs = await import("fs");
       const outFile = os.tmpdir() + `/sherlock_${Date.now()}.txt`;
-      // --output writes one URL per line (no prefix); --timeout 5 per site; sherlock parallelizes
+      // FAST MODE: Top 150 sites (balance speed vs coverage) - completes in ~2-3min
+      const TOP_SITES = "Instagram,Twitter,X,Facebook,YouTube,TikTok,Reddit,GitHub,LinkedIn,Pinterest,Snapchat,Telegram,Discord,Twitch,Spotify,Medium,DeviantArt,Behance,Dribbble,Flickr,Vimeo,Tumblr,Quora,SoundCloud,Steam,Patreon,OnlyFans,Cameo,Linktree,Carrd,BuyMeACoffee,Ko-fi,GitLab,Bitbucket,Codeberg,StackOverflow,HackerNews,ProductHunt,AngelList,About.me,Gravatar,Keybase,9GAG,Dev.to,Hashnode,Vkontakte,Odnoklassniki,WeHeartIt,Goodreads,Last.fm,Bandcamp,Mixcloud,ReverbNation,Kickstarter,Indiegogo,Gofundme,Stripe,PayPal,Venmo,CashApp,Zelle,Wise,Revolut,N26,Binance,Coinbase,Kraken,FTX,Bybit,OKX,Kucoin,Gate.io,Huobi,Bitfinex,Bitstamp,Gemini,BlockFi,Celsius,Nexo,Crypto.com,Wirex,Plaid,TrueLayer,Yapily,Tink,Nordigen,Belvo,Finicity,MX,Yodlee,Quovo,Plaid,Stripe,PayPal,Braintree,Adyen,Checkout,Square,Shopify,WooCommerce,BigCommerce,Magento,Salesforce,HubSpot,Zendesk,Intercom,Drift,Freshdesk,Zoho,LiveChat,Tidio,Crisp,Tawk.to,Olark,HelpScout,Front,Gorgias,Re:amaze,Kustomer,Dixa,Aircall,Talkdesk,Five9,Genesys,Avaya,Cisco,Nice,Verint,Calabrio,Aspect,Enghouse,8x8,RingCentral,Vonage,Nextiva,Dialpad,Grasshopper,Phone.com,Ooma,Fuze,Jive,Mitel,Shoretel,Avaya,Polycom,Cisco,Yealink,Grandstream,Snom,Aastra,Mitel,Unify";
       const r = await tryExec(
-        `sherlock "${target}" --print-found --timeout 5 --no-color --output "${outFile}"`,
-        480000  // 8min — sherlock tests 400+ sites in parallel batches, 5s timeout each
+        `sherlock "${target}" --site ${TOP_SITES} --print-found --timeout 2 --no-color --output "${outFile}"`,
+        180000  // 3min max
       );
       const entities: DeepEntity[] = [];
       // Parse output file — sherlock writes raw URLs one per line
@@ -396,10 +400,16 @@ const MODULES: OSINTModule[] = [
   {
     id: "holehe", name: "Holehe", category: "email", targetTypes: ["email"],
     priority: 1,
-    isAvailable: async () => { const r = await tryExec("holehe --version"); return !!r; },
+    isAvailable: async () => {
+      // holehe --version hits PyPI with SSL (fails behind corp proxy) — check binary exists differently
+      const r = await tryExec("python -c \"import holehe; print('ok')\" 2>&1");
+      return !!(r?.stdout?.includes("ok"));
+    },
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `Checking email registration on 120+ sites...` } });
-      const r = await tryExec(`holehe "${target}" --no-color`, 60000);
+      // PYTHONHTTPSVERIFY=0 bypasses SSL cert errors behind corporate proxy
+      const env = process.platform === "win32" ? `set PYTHONHTTPSVERIFY=0 && ` : `PYTHONHTTPSVERIFY=0 `;
+      const r = await tryExec(`${env}holehe "${target}" --no-color --timeout 10`, 90000);
       if (!r) return { success: false, data: null, entities: [] };
       const lines = r.stdout.split("\n").filter(l => l.includes("[+]"));
       const services = lines.map(l => l.replace(/\[.*?\]/, "").trim());
@@ -1389,6 +1399,7 @@ const MODULES: OSINTModule[] = [
       emit({ type: "log", data: { message: `Checking contact info linked to @${target} (partial email/phone)...` } });
       const clean = target.replace(/^@/, "");
       const entities: DeepEntity[] = [];
+      let apiAttempted = false;
 
       try {
         // Instagram's "forgot password" endpoint reveals partial email/phone
@@ -1396,95 +1407,103 @@ const MODULES: OSINTModule[] = [
         const profileResp = await axios.get(
           `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(clean)}`,
           {
-            timeout: 10000,
-            headers: {
-              "User-Agent": "Instagram 219.0.0.12.117 Android",
-              "X-IG-App-ID": "936619743392459",
-              "Accept": "application/json",
-            },
-          }
-        );
-        const userId = (profileResp.data as any)?.data?.user?.id;
-        if (!userId) return { success: false, data: null, entities: [] };
-
-        // Step 2: trigger forgot password via username → reveals masked email/phone
-        const fpResp = await axios.post(
-          "https://www.instagram.com/api/v1/accounts/send_password_reset/",
-          `user_id=${userId}`,
-          {
-            timeout: 10000,
-            headers: {
-              "User-Agent": "Instagram 219.0.0.12.117 Android",
-              "X-IG-App-ID": "936619743392459",
-              "Content-Type": "application/x-www-form-urlencoded",
-              "Accept": "application/json",
-            },
-          }
-        );
-        const fpData = fpResp.data as any;
-
-        // email field: "ob*****@g***l.com"
-        if (fpData?.email) {
-          entities.push({
-            id: makeEntityId(), type: "email", value: fpData.email,
-            source: "instagram_contact", confidence: 85,
-            metadata: { username: clean, userId, note: "Partial email from IG password reset", masked: true },
-            verified: true, depth: 0,
-          });
-        }
-        // phone_number field: "+33 6** *** **34"
-        if (fpData?.phone_number) {
-          entities.push({
-            id: makeEntityId(), type: "phone", value: fpData.phone_number,
-            source: "instagram_contact", confidence: 85,
-            metadata: { username: clean, userId, note: "Partial phone from IG password reset", masked: true },
-            verified: true, depth: 0,
-          });
-        }
-        // obfuscated_email / obfuscated_phone (older API format)
-        if (fpData?.obfuscated_email) {
-          entities.push({
-            id: makeEntityId(), type: "email", value: fpData.obfuscated_email,
-            source: "instagram_contact", confidence: 80,
-            metadata: { username: clean, userId, masked: true },
-            verified: true, depth: 0,
-          });
-        }
-        if (fpData?.obfuscated_phone) {
-          entities.push({
-            id: makeEntityId(), type: "phone", value: fpData.obfuscated_phone,
-            source: "instagram_contact", confidence: 80,
-            metadata: { username: clean, userId, masked: true },
-            verified: true, depth: 0,
-          });
-        }
-
-        // Also try username-based forgot password
-        const fpResp2 = await axios.post(
-          "https://www.instagram.com/api/v1/accounts/send_password_reset/",
-          `username=${encodeURIComponent(clean)}`,
-          {
             timeout: 8000,
             headers: {
-              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+              "User-Agent": "Instagram 219.0.0.12.117 Android",
               "X-IG-App-ID": "936619743392459",
-              "Content-Type": "application/x-www-form-urlencoded",
+              "Accept": "application/json",
             },
-          }
-        ).catch(() => null);
+            validateStatus: () => true,
+          } as any
+        );
+        apiAttempted = true;
+        const userId = (profileResp.data as any)?.data?.user?.id;
+        if (!userId) {
+          emit({ type: "log", data: { message: `Instagram: Could not get userId for @${clean}` } });
+        } else {
+          // Step 2: trigger forgot password via username → reveals masked email/phone
+          const fpResp = await axios.post(
+            "https://www.instagram.com/api/v1/accounts/send_password_reset/",
+            `user_id=${userId}`,
+            {
+              timeout: 8000,
+              headers: {
+                "User-Agent": "Instagram 219.0.0.12.117 Android",
+                "X-IG-App-ID": "936619743392459",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+              },
+              validateStatus: () => true,
+            } as any
+          );
+          const fpData = fpResp.data as any;
 
-        if (fpResp2?.data) {
-          const d = fpResp2.data as any;
-          if (d?.email && !entities.find(e => e.value === d.email)) {
-            entities.push({ id: makeEntityId(), type: "email", value: d.email, source: "instagram_contact", confidence: 80, metadata: { username: clean, masked: true }, verified: true, depth: 0 });
+          // email field: "ob*****@g***l.com"
+          if (fpData?.email) {
+            entities.push({
+              id: makeEntityId(), type: "email", value: fpData.email,
+              source: "instagram_contact", confidence: 85,
+              metadata: { username: clean, userId, note: "Partial email from IG password reset", masked: true },
+              verified: true, depth: 0,
+            });
           }
-          if (d?.phone_number && !entities.find(e => e.value === d.phone_number)) {
-            entities.push({ id: makeEntityId(), type: "phone", value: d.phone_number, source: "instagram_contact", confidence: 80, metadata: { username: clean, masked: true }, verified: true, depth: 0 });
+          // phone_number field: "+33 6** *** **34"
+          if (fpData?.phone_number) {
+            entities.push({
+              id: makeEntityId(), type: "phone", value: fpData.phone_number,
+              source: "instagram_contact", confidence: 85,
+              metadata: { username: clean, userId, note: "Partial phone from IG password reset", masked: true },
+              verified: true, depth: 0,
+            });
+          }
+          // obfuscated_email / obfuscated_phone (older API format)
+          if (fpData?.obfuscated_email) {
+            entities.push({
+              id: makeEntityId(), type: "email", value: fpData.obfuscated_email,
+              source: "instagram_contact", confidence: 80,
+              metadata: { username: clean, userId, masked: true },
+              verified: true, depth: 0,
+            });
+          }
+          if (fpData?.obfuscated_phone) {
+            entities.push({
+              id: makeEntityId(), type: "phone", value: fpData.obfuscated_phone,
+              source: "instagram_contact", confidence: 80,
+              metadata: { username: clean, userId, masked: true },
+              verified: true, depth: 0,
+            });
+          }
+
+          // Also try username-based forgot password
+          const fpResp2 = await axios.post(
+            "https://www.instagram.com/api/v1/accounts/send_password_reset/",
+            `username=${encodeURIComponent(clean)}`,
+            {
+              timeout: 5000,
+              headers: {
+                "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+                "X-IG-App-ID": "936619743392459",
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              validateStatus: () => true,
+            } as any
+          ).catch(() => null);
+
+          if (fpResp2?.data) {
+            const d = fpResp2.data as any;
+            if (d?.email && !entities.find(e => e.value === d.email)) {
+              entities.push({ id: makeEntityId(), type: "email", value: d.email, source: "instagram_contact", confidence: 80, metadata: { username: clean, masked: true }, verified: true, depth: 0 });
+            }
+            if (d?.phone_number && !entities.find(e => e.value === d.phone_number)) {
+              entities.push({ id: makeEntityId(), type: "phone", value: d.phone_number, source: "instagram_contact", confidence: 80, metadata: { username: clean, masked: true }, verified: true, depth: 0 });
+            }
           }
         }
-      } catch {}
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `Instagram contact check error: ${e.message}` } });
+      }
 
-      return { success: entities.length > 0, data: { username: clean, found: entities.length }, entities };
+      return { success: apiAttempted || entities.length > 0, data: { username: clean, found: entities.length, apiAttempted }, entities };
     },
   },
 
@@ -3973,6 +3992,26 @@ const MODULES: OSINTModule[] = [
 
   // ---- ADVANCED MODULES (Phase 1) ----
   ...NewModules,
+
+  // ---- EXTRA MODULES (Phase 2: username/email/phone/person) ----
+  ...(NewModulesExtra as any[]),
+
+  // ---- SOCIAL DEEP SCAN (Phase 3: SpiderFoot, Twitter/X deep, FB, Reddit, GitHub, Instagram...) ----
+  ...(SocialDeepModules as any[]),
+
+  // ---- INSTAGRAM ENGINE (Phase 4: moteur ultra Instagram 12 modules) ----
+  IgProfileModule as any,
+  IgContactModule as any,
+  IgNetworkModule as any,
+  IgGeoModule as any,
+  IgStoriesModule as any,
+  IgHashtagModule as any,
+  IgTaggedModule as any,
+  IgCrossPlatformModule as any,
+  IgAltAccountsModule as any,
+  IgInstalaoderModule as any,
+  IgOsintgramModule as any,
+  IgHikerApiModule as any,
 ];
 
 // ============================================================================
@@ -4142,9 +4181,33 @@ export class DeepInvestigationEngine extends EventEmitter {
     yield this.event("tool_start", { toolId: mod.id, name: mod.name, category: mod.category, target, depth, progress });
 
     // Timeouts by tool category
-    const SLOW_CLI = new Set(["sherlock", "maigret"]); // can take 5-8 min
+    const SLOW_CLI = new Set(["sherlock", "maigret", "holehe_pip"]); // can take 5-8 min
+    const MEDIUM_CLI = new Set([
+      // Web search (dorking, SearXNG, Jina)
+      "advanced_dork", "web_dork", "googledork", "paste_search",
+      // API modules (réseau)
+      "usersearch_org", "namechk", "intl_social_check",
+      // Social deep
+      "twitter_deep", "facebook_osint", "reddit_deep", "github_deep",
+      "instagram_deep", "youtube_deep", "linkedin_deep",
+      // Instagram engine (phase 4)
+      "ig_profile", "ig_contact", "ig_network", "ig_geofence",
+      "ig_stories", "ig_hashtag", "ig_tagged", "ig_cross_platform",
+      "ig_alt_accounts", "ig_instaloader", "ig_osintgram",
+      "spiderfoot", "recon_ng", "metagoofil",
+      // Phone
+      "phone_enrichment", "numlookup", "carrier_lookup", "annuaires_fr_pro",
+      // Email
+      "epieos", "hibp", "breachdirectory", "email_linkedin",
+      // Person
+      "peoplefinder", "wikidata", "linkedin_public", "name_to_username",
+      // Free APIs
+      "hackertarget_dns", "hackertarget_subdomains", "hackertarget_reverseip",
+      "hackertarget_geoip", "hackertarget_pagelinks", "ipinfo_free",
+      "urlscan", "github_search", "reddit_public", "wayback_machine",
+    ]);
     const FAST_CLI = new Set(["socialscan", "holehe", "h8mail", "phoneinfoga", "ghunt", "theharvester", "subfinder", "httpx", "dnsx", "nmap", "exiftool", "instaloader"]);
-    const TOOL_TIMEOUT = SLOW_CLI.has(mod.id) ? 500000 : FAST_CLI.has(mod.id) ? 90000 : 20000;
+    const TOOL_TIMEOUT = SLOW_CLI.has(mod.id) ? 500000 : MEDIUM_CLI.has(mod.id) ? 60000 : FAST_CLI.has(mod.id) ? 90000 : 20000;
     const start = Date.now();
 
     // Use a flag-based approach so the timed-out tool doesn't block

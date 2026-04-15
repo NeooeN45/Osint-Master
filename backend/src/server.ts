@@ -24,7 +24,11 @@ import { intelligenceRouter } from "./routes/intelligence";
 import { autoInvestigationRouter } from "./routes/autoInvestigation";
 import { deepInvestigationRouter } from "./routes/deepInvestigation";
 import { deepEngine } from "./services/deepEngine";
+import { deepInvestigationV2Router } from "./routes/deepInvestigationV2";
+import { deepEngineV2 } from "./services/DeepEngineV2";
 import { configRouter } from "./routes/config";
+import { dorksRouter } from "./routes/dorks";
+import { instagramRouter } from "./routes/instagram";
 
 const PORT = process.env.PORT || 3002;
 const app = express();
@@ -32,6 +36,8 @@ const app = express();
 // Register SSE streaming routes BEFORE helmet/json middleware to prevent buffering
 // Only cors is applied; JSON body is parsed inside the route handler
 app.use("/api/deep", cors({ origin: true, credentials: true }), deepInvestigationRouter);
+app.use("/api/deep-v2", cors({ origin: true, credentials: true }), deepInvestigationV2Router);
+app.use("/api/instagram", cors({ origin: true, credentials: true }), instagramRouter);
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: true, credentials: true }));
@@ -50,6 +56,7 @@ app.get("/", (_req, res) => {
       correlation: true,
       investigation: true,
       streaming: true,
+      deepV2: true,
     },
   });
 });
@@ -71,7 +78,9 @@ app.use("/api/stream", streamRouter);
 app.use("/api/intelligence", intelligenceRouter);
 app.use("/api/auto-investigation", autoInvestigationRouter);
 // deep routes registered above middleware
+// deepInvestigationV2Router already mounted above (SSE-safe, before helmet)
 app.use("/api/config", configRouter);
+app.use("/api/dorks", dorksRouter);
 
 // ---- Error handling ----
 app.use((err: any, _req: any, res: any, _next: any) => {
@@ -86,4 +95,5 @@ app.listen(PORT, async () => {
   correlationEngine.init();
   await osintEngine.init();
   await deepEngine.init();
+  await deepEngineV2.init();
 });

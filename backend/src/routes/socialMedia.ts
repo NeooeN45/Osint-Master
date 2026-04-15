@@ -1,6 +1,7 @@
-// Social Media API Routes - Real Data Only
+// Social Media API Routes — connecté aux vrais moteurs
 import { Router, type Request, type Response } from "express";
 import { logger } from "../utils/logger";
+import { instagramEngine } from "../services/instagramEngine";
 
 const router = Router();
 
@@ -14,22 +15,16 @@ router.post("/instagram/profile", async (req: Request, res: Response) => {
     }
 
     logger.info(`Instagram profile lookup: ${username}`);
+    const modules = ["ig_profile", "ig_hikerapi", "ig_contact"];
+    if (fetchPosts) modules.push("ig_geofence", "ig_hashtag");
+    if (fetchStories) modules.push("ig_stories");
 
-    // This would integrate with:
-    // - Apify Instagram Scraper
-    // - Instaloader CLI
-    // - ScrapingBee
-    // For now, return error indicating API not configured
-    
-    res.status(503).json({
-      error: "Instagram API not configured",
-      message: "Please configure Instagram scraping service (Apify, ScrapingBee, or Instaloader)",
-      requiredConfig: [
-        "APIFY_TOKEN - for Apify Instagram Scraper",
-        "SCRAPINGBEE_API_KEY - for ScrapingBee proxy",
-        "INSTALOADER_ENABLED - for local CLI execution"
-      ]
-    });
+    const events: any[] = [];
+    for await (const event of instagramEngine.investigate(username, { depth: "fast", modules })) {
+      events.push(event);
+    }
+    const complete = events.find(e => e.type === "complete");
+    res.json(complete?.data || { username, events });
   } catch (error) {
     logger.error("Instagram profile error:", error);
     res.status(500).json({ error: "Instagram lookup failed" });
