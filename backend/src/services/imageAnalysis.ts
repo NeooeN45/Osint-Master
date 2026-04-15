@@ -159,7 +159,7 @@ export async function reverseImageSearch(
     for (const engine of engines) {
       try {
         const matches = await searchEngine(engine, imageUrl, opsec);
-        results[engine as keyof typeof results] = matches.urls;
+        (results as any)[engine] = matches.urls;
         results.matches.push(...matches.results);
       } catch (error: any) {
         logger.warn(`[ImageAnalysis] ${engine} search failed:`, error.message);

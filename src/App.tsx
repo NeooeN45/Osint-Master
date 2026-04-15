@@ -1,5 +1,5 @@
-import OsintApp from "./app/OsintApp";
+import OsintAppPremium from "./app/OsintAppPremium";
 
 export default function App() {
-  return <OsintApp />;
+  return <OsintAppPremium />;
 }

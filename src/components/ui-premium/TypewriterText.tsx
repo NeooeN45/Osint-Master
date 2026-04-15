@@ -1,0 +1,3 @@
+//
+TypewriterText
+component

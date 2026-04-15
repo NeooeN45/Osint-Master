@@ -597,42 +597,59 @@ export function findAdvancedCorrelations(entities: any[]): Array<{
 // ============================================================================
 
 export const SearchEngines = {
-  // DuckDuckGo HTML scraping
+  // DuckDuckGo via l'API Instant Answer (JSON, sans scraping)
   async duckduckgo(query: string): Promise<Array<{ title: string; url: string; snippet: string }>> {
+    const results: Array<{ title: string; url: string; snippet: string }> = [];
+    
+    // Méthode 1: DDG Instant Answer API (toujours disponible)
     try {
       const resp = await axios.get(
-        `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-        {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          },
-          timeout: 15000,
-        }
+        `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`,
+        { timeout: 8000, headers: { "User-Agent": "OSINT-Master/5.0" } }
       );
-      
-      const html = resp.data as string;
-      const results: Array<{ title: string; url: string; snippet: string }> = [];
-      
-      // Parse DDG results (simplified)
-      const resultBlocks = html.match(/<a[^>]*class="result__a"[^>]*>.*?<\/a>/g) || [];
-      
-      for (const block of resultBlocks.slice(0, 10)) {
-        const titleMatch = block.match(/>([^<]+)</);
-        const urlMatch = block.match(/href="([^"]+)"/);
-        
-        if (titleMatch && urlMatch) {
-          results.push({
-            title: titleMatch[1].trim(),
-            url: decodeURIComponent(urlMatch[1].replace(/\+/g, ' ')),
-            snippet: "",
-          });
+      const d = resp.data as any;
+      if (d?.RelatedTopics?.length) {
+        for (const t of d.RelatedTopics.slice(0, 8)) {
+          if (t.FirstURL && t.Text) {
+            results.push({ title: t.Text.slice(0, 80), url: t.FirstURL, snippet: t.Text });
+          }
         }
       }
-      
-      return results;
-    } catch (e) {
-      return [];
+    } catch {}
+    
+    // Méthode 2: Jina.ai reader (résume pages web publiques, contourne anti-scraping)
+    if (results.length === 0) {
+      try {
+        const resp = await axios.get(
+          `https://s.jina.ai/${encodeURIComponent(query)}`,
+          { timeout: 8000, headers: { "Accept": "application/json", "X-No-Cache": "true" } }
+        );
+        const d = resp.data as any;
+        if (Array.isArray(d?.data)) {
+          for (const r of d.data.slice(0, 6)) {
+            results.push({ title: r.title || r.url, url: r.url, snippet: r.description || r.content?.slice(0, 200) || "" });
+          }
+        }
+      } catch {}
     }
+    
+    // Méthode 3: SearXNG instance publique
+    if (results.length === 0) {
+      try {
+        const resp = await axios.get(
+          `https://searx.be/search?q=${encodeURIComponent(query)}&format=json&engines=bing,google,duckduckgo`,
+          { timeout: 8000, headers: { "User-Agent": "Mozilla/5.0" } }
+        );
+        const d = resp.data as any;
+        if (d?.results?.length) {
+          for (const r of d.results.slice(0, 8)) {
+            results.push({ title: r.title, url: r.url, snippet: r.content || "" });
+          }
+        }
+      } catch {}
+    }
+    
+    return results;
   },
   
   // Bing API

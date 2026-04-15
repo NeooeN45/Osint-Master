@@ -10,18 +10,25 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@reactflow/core": "^11.11.4",
     "@types/leaflet": "^1.9.21",
+    "@types/leaflet.markercluster": "^1.5.6",
+    "@types/three": "^0.183.1",
     "clsx": "^2.1.1",
     "exifreader": "^4.23.5",
+    "framer-motion": "^12.38.0",
     "graphql-ws": "^6.0.8",
+    "gsap": "^3.15.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "number-flow": "^0.6.0",
     "pdf-lib": "^1.17.1",
     "pica": "^9.0.1",
     "react": "^19.0.0",
@@ -34,6 +41,7 @@
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tesseract.js": "^5.0.5",
+    "three": "^0.183.2",
     "zustand": "^5.0.0"
   },
   "devDependencies": {

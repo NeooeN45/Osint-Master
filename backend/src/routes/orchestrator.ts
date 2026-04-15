@@ -235,11 +235,11 @@ orchestratorRouter.post("/opsec/level", async (req, res) => {
       success: true,
       level,
       message: `OPSEC level set to ${level}`,
-      details: {
+      details: ({
         standard: "Minimal protection, direct requests",
         cautious: "Proxy rotation, fingerprint randomization, rate limiting",
         paranoid: "Tor + aggressive rotation, maximum delays, anti-fingerprinting"
-      }[level]
+      } as Record<string, string>)[level]
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

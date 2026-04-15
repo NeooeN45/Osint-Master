@@ -129,10 +129,8 @@ router.post("/reverse-search", async (req: Request, res: Response) => {
 
     logger.info(`[ImageAPI] Reverse search for: ${imageUrl}`);
 
-    // Enable OPSEC for search
-    await opsecManager.setTorEnabled(true);
-
     const results = await imageAnalysis.reverseImageSearch(imageUrl, engines);
+    if (!results) throw new Error('No results returned');
 
     res.json({
       success: true,

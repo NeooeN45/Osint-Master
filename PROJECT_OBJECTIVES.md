@@ -47,29 +47,34 @@ Construire un moteur OSINT professionnel complet, autonome et streamé capable d
 - [x] `twscrape` Python installé
 - [x] `backend/.env.example` complet (30+ variables)
 
-### Phase 4 — Moteur Instagram Ultra (EN COURS 🔄)
-- [x] Architecture définie (12 modules dédiés)
-- [ ] `instagramEngine.ts` — fichier principal créé
-- [ ] Route `/api/instagram/*` — endpoint SSE dédié
-- [ ] Module: Profil multi-endpoint (7 fallbacks)
-- [ ] Module: Network analysis (followers/following bulk)
-- [ ] Module: Geofencing GPS posts
-- [ ] Module: Story + Highlights scrape
-- [ ] Module: Hashtag OSINT (qui d'autre utilise ce hashtag)
-- [ ] Module: Cross-platform (username → 20 plateformes)
-- [ ] Module: Alt accounts detection (même avatar/style)
-- [ ] Module: Business Intel complet
-- [ ] Module: Commented posts / tagged posts
-- [ ] Connexion route `socialMedia.ts` → `instagramEngine.ts`
-- [ ] Fix doublon deepInvestigationV2Router dans server.ts
+### Phase 4 — Moteur Instagram Ultra (complété ✅ — 2026-04-15)
+- [x] `instagramEngine.ts` — 12 modules + orchestrateur AsyncGenerator SSE (~700 lignes)
+- [x] Route `/api/instagram/investigate` — SSE streaming complet
+- [x] Route `/api/instagram/profile/:u` — profil rapide JSON
+- [x] Route `/api/instagram/network` — analyse réseau
+- [x] Route `/api/instagram/geofence` — carte GPS
+- [x] Route `/api/instagram/cross-platform` — 20 plateformes
+- [x] Module `ig_profile`: 7 endpoints cascade (API v1, graphql, HTML, picuki, imginn, storiesig)
+- [x] Module `ig_contact`: password reset trick → email/phone masqués
+- [x] Module `ig_network`: followers/following bulk (50 chacun) + mutuals
+- [x] Module `ig_geofence`: GPS posts, patterns horaires, timezone inference
+- [x] Module `ig_stories`: storiesig.app + highlights + insta-stories.to
+- [x] Module `ig_hashtag`: hashtags utilisés + comptes liés (top 3)
+- [x] Module `ig_tagged`: posts tagués + top taggers + mentions picuki
+- [x] Module `ig_cross_platform`: 20 plateformes en parallèle (batch 5)
+- [x] Module `ig_alt_accounts`: variantes username + Google fullname + reverse image Bing
+- [x] Module `ig_instaloader`: CLI deep metadata
+- [x] Module `ig_osintgram`: emails/phones réseau (addrs, fwersemail, fwersnumber)
+- [x] Module `ig_hikerapi`: 3 hosts RapidAPI (scraper API2, looter2, bulk scrapper)
+- [x] Connexion `socialMedia.ts` stub 503 → vrais appels `instagramEngine`
+- [x] Fix doublon `deepInvestigationV2Router` dans `server.ts`
+- [x] 12 modules ajoutés dans `deepEngine.ts` MODULES[] + MEDIUM_CLI timeouts
+- [x] Commit Git structuré `feat(instagram): ...`
 
 ---
 
 ## Phase 5 — Qualité & Fixes (À FAIRE)
 
-- [ ] Fixer `socialMedia.ts` — routes retournent 503 → connecter au vrai moteur
-- [ ] Fixer doublon `deepInvestigationV2Router` dans `server.ts` (ligne 38 + 79)
-- [ ] Ajouter module `instagramEngine` au registre `deepEngine.ts` MODULES[]
 - [ ] Persistence résultats (SQLite ou fichier JSON par investigation)
 - [ ] `Osintgram/credentials.ini` — documenter la configuration
 - [ ] Tests unitaires pour modules critiques

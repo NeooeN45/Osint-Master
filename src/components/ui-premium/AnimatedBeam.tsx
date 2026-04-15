@@ -1,0 +1,3 @@
+//
+AnimatedBeam
+component

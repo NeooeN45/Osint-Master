@@ -210,7 +210,7 @@ function generateHTMLReport(summary: any): string {
       font-weight: bold;
       text-transform: uppercase;
       color: white;
-      background: ${riskColors[summary.riskLevel]};
+      background: ${riskColors[summary.riskLevel as keyof typeof riskColors]};
     }
     .section { 
       background: white; 
@@ -252,7 +252,7 @@ function generateHTMLReport(summary: any): string {
       <p>Entités trouvées</p>
     </div>
     <div class="stat-card">
-      <h3 style="color: ${riskColors[summary.riskLevel]};">${summary.riskScore}</h3>
+      <h3 style="color: ${riskColors[summary.riskLevel as keyof typeof riskColors]};">${summary.riskScore}</h3>
       <p>Score de risque</p>
     </div>
     <div class="stat-card">

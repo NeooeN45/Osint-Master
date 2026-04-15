@@ -124,7 +124,7 @@ export async function checkHIBP(email: string): Promise<{ breaches: BreachData[]
           timeout: 10000
         }
       );
-      pastes = pastesRes.data || [];
+      pastes = (pastesRes.data as any) || [];
     } catch (e) {
       // Pastes peuvent être vides
     }
@@ -217,9 +217,9 @@ export async function shodanHost(ip: string): Promise<ShodanHostData | null> {
       }
     );
 
-    logger.info(`[Shodan] Retrieved data for ${ip}: ${response.data.ports?.length || 0} ports`);
+    logger.info(`[Shodan] Retrieved data for ${ip}: ${(response.data as any).ports?.length || 0} ports`);
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as ShodanHostData;
   } catch (error: any) {
     logger.error("[Shodan] Error:", error.message);
     return null;
@@ -247,7 +247,7 @@ export async function shodanSearch(query: string, limit: number = 10): Promise<S
       }
     );
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as ShodanSearchResult;
   } catch (error: any) {
     logger.error("[Shodan] Search error:", error.message);
     return { matches: [], total: 0 };
@@ -262,7 +262,7 @@ export async function shodanDnsResolve(hostname: string): Promise<string | null>
       `https://api.shodan.io/dns/resolve?hostnames=${hostname}&key=${config.shodan.apiKey}`,
       { timeout: 10000 }
     );
-    return response.data[hostname] || null;
+    return (response.data as any)[hostname] || null;
   } catch (error) {
     return null;
   }
@@ -276,7 +276,7 @@ export async function shodanDnsReverse(ip: string): Promise<string[]> {
       `https://api.shodan.io/dns/reverse?ips=${ip}&key=${config.shodan.apiKey}`,
       { timeout: 10000 }
     );
-    return response.data[ip] || [];
+    return (response.data as any)[ip] || [];
   } catch (error) {
     return [];
   }
@@ -356,7 +356,7 @@ export async function virustotalIP(ip: string): Promise<VTIPReport | null> {
       }
     );
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as VTIPReport;
   } catch (error: any) {
     logger.error("[VirusTotal] IP error:", error.message);
     return null;
@@ -375,7 +375,7 @@ export async function virustotalDomain(domain: string): Promise<VTDomainReport |
       }
     );
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as VTDomainReport;
   } catch (error: any) {
     logger.error("[VirusTotal] Domain error:", error.message);
     return null;
@@ -390,7 +390,7 @@ export function getVTScore(report: VTIPReport | VTDomainReport | null): { malici
   const stats = report.data.attributes.last_analysis_stats;
   const malicious = stats.malicious || 0;
   const suspicious = stats.suspicious || 0;
-  const total = stats.harmless + malicious + suspicious + (stats.undetected || 0);
+  const total = stats.harmless + malicious + suspicious + ((stats as any).undetected || 0);
 
   return {
     malicious: malicious + suspicious,
@@ -454,9 +454,9 @@ export async function checkAbuseIPDB(ip: string): Promise<AbuseIPDBReport | null
       }
     );
 
-    logger.info(`[AbuseIPDB] ${ip} confidence: ${response.data.data.abuseConfidenceScore}%`);
+    logger.info(`[AbuseIPDB] ${ip} confidence: ${(response.data as any).data?.abuseConfidenceScore}%`);
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as AbuseIPDBReport;
   } catch (error: any) {
     logger.error("[AbuseIPDB] Error:", error.message);
     return null;
@@ -527,7 +527,7 @@ export async function getIPinfo(ip: string): Promise<IPinfoData | null> {
       timeout: 10000
     });
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as IPinfoData;
   } catch (error: any) {
     logger.error("[IPinfo] Error:", error.message);
     return null;
@@ -661,7 +661,7 @@ export async function clearbitEnrichCompany(domain: string): Promise<ClearbitCom
       }
     );
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as ClearbitCompany;
   } catch (error: any) {
     if (error.response?.status === 404) {
       return null; // Company not found
@@ -684,7 +684,7 @@ export async function clearbitEnrichPerson(email: string): Promise<ClearbitPerso
       }
     );
 
-    return response.data as ShodanHostData;
+    return response.data as unknown as ClearbitPerson;
   } catch (error: any) {
     if (error.response?.status === 404) {
       return null;
@@ -751,7 +751,7 @@ export async function hunterDomainSearch(domain: string, limit: number = 10): Pr
       }
     );
 
-    return response.data.data;
+    return (response.data as any).data;
   } catch (error: any) {
     logger.error("[Hunter] Error:", error.message);
     return null;
@@ -776,8 +776,8 @@ export async function hunterEmailFinder(domain: string, firstName: string, lastN
     );
 
     return {
-      email: response.data.data.email,
-      score: response.data.data.score
+      email: (response.data as any).data?.email,
+      score: (response.data as any).data?.score
     };
   } catch (error: any) {
     logger.error("[Hunter] Finder error:", error.message);

@@ -445,6 +445,7 @@ class GeolocationService {
         country: 'United States',
         countryCode: 'US',
         region: 'New York',
+        regionCode: 'NY',
         city: 'New York',
         zipCode: '10001',
       },
@@ -469,7 +470,7 @@ class GeolocationService {
         timeout: 5000,
       });
       
-      const data = response.data;
+      const data = response.data as any;
       return {
         coordinates: {
           latitude: data.lat,
@@ -508,13 +509,13 @@ class GeolocationService {
     // ipinfo.io - requires API key
     try {
       const token = process.env.IPINFO_TOKEN;
-      if (!token) return null;
+      if (!token) return {};
 
       const response = await axios.get(`https://ipinfo.io/${ip}/json?token=${token}`, {
         timeout: 5000,
       });
 
-      const data = response.data;
+      const data = response.data as any;
       const [lat, lng] = (data.loc || '0,0').split(',').map((s: string) => parseFloat(s));
 
       return {
@@ -529,7 +530,7 @@ class GeolocationService {
           country: data.country,
           countryCode: data.country,
           region: data.region,
-          regionCode: data.region,
+          regionCode: data.region || '',
           city: data.city,
           zipCode: data.postal,
         },
@@ -558,7 +559,7 @@ class GeolocationService {
         timeout: 5000,
       });
 
-      const data = response.data;
+      const data = response.data as any;
       return {
         coordinates: {
           latitude: data.location?.latitude,
@@ -571,6 +572,7 @@ class GeolocationService {
           country: data.country?.name,
           countryCode: data.country?.isoAlpha2,
           region: data.location?.principalSubdivision,
+          regionCode: '',
           city: data.location?.city,
           zipCode: data.location?.postcode,
         },
@@ -622,7 +624,7 @@ class GeolocationService {
     };
   }
 
-  private async triangulatePosition(phone: string, mcc: string, mnc: string, lac: string): Promise<GeoLocationResult['cellInfo']['triangulation']> {
+  private async triangulatePosition(phone: string, mcc: string, mnc: string, lac: string): Promise<any> {
     // Get multiple towers and triangulate
     const towers = [
       { lat: 34.0522, lng: -118.2437, strength: -75, distance: 500 },
@@ -651,7 +653,7 @@ class GeolocationService {
       if (cellId) url += `&cellid=${cellId}`;
 
       const response = await axios.get(url, { timeout: 10000 });
-      const cells = response.data.cells || [];
+      const cells = (response.data as any).cells || [];
 
       if (cells.length > 0) {
         const cell = cells[0];
@@ -706,7 +708,7 @@ class GeolocationService {
         }
       );
 
-      const data = response.data;
+      const data = response.data as any;
       if (data.success && data.results.length > 0) {
         const network = data.results[0];
         return {
@@ -721,6 +723,7 @@ class GeolocationService {
             country: network.country || '',
             countryCode: '',
             region: network.region || '',
+            regionCode: '',
             city: network.city || '',
           },
         };
@@ -757,7 +760,7 @@ class GeolocationService {
         `https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`,
         { timeout: 5000 }
       );
-      return response.data.results[0]?.elevation || 0;
+      return (response.data as any).results?.[0]?.elevation || 0;
     } catch (error) {
       return 0;
     }
@@ -774,7 +777,7 @@ class GeolocationService {
         { timeout: 10000 }
       );
 
-      return (response.data.results || []).map((place: any) => ({
+      return ((response.data as any).results || []).map((place: any) => ({
         type: place.types[0],
         name: place.name,
         lat: place.geometry.location.lat,
@@ -854,7 +857,7 @@ class GeolocationService {
     const timestamp = new Date(cached.timestamp).getTime();
     if (Date.now() - timestamp > this.CACHE_TTL) {
       this.cache.delete(key);
-      return {};
+      return null;
     }
     
     return cached;
@@ -866,7 +869,7 @@ class GeolocationService {
     // Limit cache size
     if (this.cache.size > 1000) {
       const firstKey = this.cache.keys().next().value;
-      this.cache.delete(firstKey);
+      if (firstKey !== undefined) this.cache.delete(firstKey);
     }
   }
 }
