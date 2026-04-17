@@ -60,6 +60,7 @@ export class DockerManager extends EventEmitter {
   private torStatus: TorStatus = {
     running: false,
     connected: false,
+    isTor: false,
     circuitEstablished: false,
   };
   private healthCheckInterval?: NodeJS.Timeout;
