@@ -1,11 +1,20 @@
 /**
- * OPSEC Manager - Gestion de la sécurité opérationnelle
+ * OPSEC Manager v2 - Gestion de la sécurité opérationnelle
+ * Intègre: Tor Manager, Proxy Rotator, Data Vault, Fingerprint Spoofer
  * Rotation de proxies, Tor, User-Agents, jitter, rate limiting, anti-détection
  * Niveaux: standard (léger), cautious (moyen), paranoid (maximum)
+ * 
+ * Mise à jour: 17 Avril 2026 - Phase 1 OPSEC Foundation
  */
 
 import { logger } from "../utils/logger";
 import crypto from "crypto";
+
+// Import des nouveaux modules OPSEC Phase 1
+import * as torManager from "./opsec/torManager";
+import * as proxyRotator from "./opsec/proxyRotator";
+import * as dataVault from "./opsec/dataVault";
+import * as fingerprintSpoofer from "./opsec/fingerprintSpoofer";
 
 // ============================================================================
 // TYPES
@@ -648,6 +657,215 @@ export class OPSECManager {
       this.level = previousLevel;
       logger.info(`[OPSEC] SENSITIVE MODE expired, returning to ${previousLevel}`);
     }, durationMinutes * 60000);
+  }
+
+  // ============================================================================
+  // NOUVELLES MÉTHODES - Phase 1 OPSEC Foundation (v2)
+  // ============================================================================
+
+  /**
+   * Démarrer Tor avec le Tor Manager avancé
+   */
+  async startTorManager(config?: torManager.TorConfig): Promise<boolean> {
+    logger.info("[OPSEC] Starting Tor Manager...");
+    const result = await torManager.startTor(config);
+    if (result) {
+      this.torEnabled = true;
+      logger.info("[OPSEC] Tor Manager started successfully");
+    }
+    return result;
+  }
+
+  /**
+   * Arrêter Tor Manager
+   */
+  async stopTorManager(): Promise<boolean> {
+    logger.info("[OPSEC] Stopping Tor Manager...");
+    const result = await torManager.stopTor();
+    if (result) {
+      this.torEnabled = false;
+      logger.info("[OPSEC] Tor Manager stopped");
+    }
+    return result;
+  }
+
+  /**
+   * Obtenir le statut Tor détaillé
+   */
+  getTorStatus(): torManager.TorStatus {
+    return torManager.getTorStatus();
+  }
+
+  /**
+   * Rotation d'identité Tor (NEWNYM)
+   */
+  async rotateTorIdentity(): Promise<boolean> {
+    logger.info("[OPSEC] Rotating Tor identity...");
+    return await torManager.newIdentity();
+  }
+
+  /**
+   * Health check Tor complet
+   */
+  async checkTorHealth(): Promise<{ healthy: boolean; issues: string[]; status: torManager.TorStatus }> {
+    return await torManager.torHealthCheck();
+  }
+
+  /**
+   * Initialiser le Proxy Rotator avec une liste de proxies
+   */
+  initProxyRotator(proxies: proxyRotator.Proxy[]): void {
+    proxyRotator.initProxyPool(proxies);
+    // Ajouter les proxies au pool interne aussi
+    for (const proxy of proxies) {
+      this.proxies.set(proxy.id, {
+        id: proxy.id,
+        host: proxy.host,
+        port: proxy.port,
+        protocol: proxy.protocol,
+        auth: proxy.username && proxy.password ? { username: proxy.username, password: proxy.password } : undefined,
+        country: proxy.country,
+        failCount: 0,
+        reliability: 100,
+      });
+    }
+    logger.info(`[OPSEC] Proxy Rotator initialized with ${proxies.length} proxies`);
+  }
+
+  /**
+   * Ajouter des proxies publics gratuits (pour tests)
+   */
+  addPublicProxies(): void {
+    proxyRotator.addPublicProxies();
+    logger.info("[OPSEC] Public proxies added to rotation");
+  }
+
+  /**
+   * Obtenir le prochain proxy avec rotation intelligente
+   */
+  getNextProxy(): proxyRotator.Proxy | null {
+    return proxyRotator.getNextProxy();
+  }
+
+  /**
+   * Obtenir les statistiques du proxy pool
+   */
+  getProxyStats(): proxyRotator.ProxyStats {
+    return proxyRotator.getProxyStats();
+  }
+
+  /**
+   * Faire une requête avec rotation automatique de proxy
+   */
+  async requestWithProxy<T>(
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    url: string,
+    data?: any,
+    maxRetries: number = 3
+  ): Promise<{ data: T; proxy: proxyRotator.Proxy }> {
+    return await proxyRotator.requestWithProxyRotation<T>(method, url, data, maxRetries);
+  }
+
+  /**
+   * Initialiser le Data Vault
+   */
+  async initDataVault(password: string, vaultDir?: string): Promise<boolean> {
+    const config: dataVault.VaultConfig = {
+      vaultDir: vaultDir || './data/vault',
+      masterPassword: password,
+      autoDestruct: this.level === 'paranoid',
+      retentionMinutes: this.level === 'paranoid' ? 60 : undefined,
+    };
+    return await dataVault.initVault(config);
+  }
+
+  /**
+   * Chiffrer et sauvegarder des données sensibles
+   */
+  async saveSensitiveData(
+    id: string,
+    type: dataVault.VaultEntry['type'],
+    data: string | object,
+    metadata?: any
+  ): Promise<dataVault.VaultEntry> {
+    return await dataVault.saveEntry(id, type, data, metadata);
+  }
+
+  /**
+   * Charger et déchiffrer des données
+   */
+  async loadSensitiveData(id: string): Promise<{ entry: dataVault.VaultEntry; decrypted: any }> {
+    return await dataVault.loadEntry(id);
+  }
+
+  /**
+   * Supprimer sécurisément des données
+   */
+  async deleteSensitiveData(id: string): Promise<boolean> {
+    return await dataVault.deleteEntry(id);
+  }
+
+  /**
+   * Effacer toutes les données (mode panic)
+   */
+  async wipeAllData(): Promise<boolean> {
+    logger.warn("[OPSEC] WIPING ALL DATA - Panic mode activated");
+    return await dataVault.wipeAllData();
+  }
+
+  /**
+   * Générer un fingerprint avancé avec le Fingerprint Spoofer
+   */
+  generateAdvancedFingerprint(profile?: fingerprintSpoofer.FingerprintProfile): fingerprintSpoofer.BrowserFingerprint {
+    return fingerprintSpoofer.generateFingerprint(profile);
+  }
+
+  /**
+   * Rotation du fingerprint
+   */
+  rotateFingerprint(): fingerprintSpoofer.BrowserFingerprint {
+    return fingerprintSpoofer.rotateFingerprint();
+  }
+
+  /**
+   * Obtenir les headers HTTP spoofés
+   */
+  getSpoofedHeaders(): Record<string, string> {
+    return fingerprintSpoofer.getSpoofedHeaders();
+  }
+
+  /**
+   * Activer le mode paranoid pour fingerprints (rotation agressive)
+   */
+  enableParanoidFingerprintMode(): void {
+    fingerprintSpoofer.setParanoidMode(true);
+    logger.info("[OPSEC] Paranoid fingerprint mode enabled");
+  }
+
+  /**
+   * Désactiver le mode paranoid fingerprints
+   */
+  disableParanoidFingerprintMode(): void {
+    fingerprintSpoofer.setParanoidMode(false);
+    logger.info("[OPSEC] Paranoid fingerprint mode disabled");
+  }
+
+  /**
+   * Health check complet de tous les systèmes OPSEC
+   */
+  async fullHealthCheck(): Promise<{
+    tor: { healthy: boolean; issues: string[] };
+    vault: { healthy: boolean; issues: string[] };
+    overall: boolean;
+  }> {
+    const torHealth = await torManager.torHealthCheck();
+    const vaultHealth = await dataVault.vaultHealthCheck();
+
+    return {
+      tor: { healthy: torHealth.healthy, issues: torHealth.issues },
+      vault: { healthy: vaultHealth.healthy, issues: vaultHealth.issues },
+      overall: torHealth.healthy && vaultHealth.healthy,
+    };
   }
 }
 

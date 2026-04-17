@@ -263,14 +263,89 @@ git push origin main
 
 ---
 
-## PROCHAINES ÉTAPES (À VENIR)
+## PROCHAINES ÉTAPES
 
-### Phase 3: OPSEC & Tool Runner
-- [ ] Tor Manager implementation
-- [ ] Proxy rotation service
-- [ ] Data Vault (AES-256-GCM)
-- [ ] Fingerprint spoofer
-- [ ] Tool Runner Core (auto-install, auto-run)
+### ✅ Phase 1: OPSEC Foundation (COMPLÉTÉ - 17 Avril 2026)
+- [x] **Tor Manager** - `backend/src/services/opsec/torManager.ts` ✅
+  - Démarrage/Arrêt Tor
+  - Rotation identité (NEWNYM)
+  - Vérification connexion Tor
+  - Auto-rotation toutes les 10min
+  
+- [x] **Proxy Rotator** - `backend/src/services/opsec/proxyRotator.ts` ✅
+  - Pool de proxies SOCKS5/HTTP
+  - Rotation automatique (round-robin/random/smart)
+  - Health check automatique
+  - Fallback Tor
+  
+- [x] **Data Vault** - `backend/src/services/opsec/dataVault.ts` ✅
+  - Chiffrement AES-256-GCM
+  - PBKDF2 600k iterations
+  - Auto-destruction (mode paranoid)
+  - Secure delete (overwrite)
+  
+- [x] **Fingerprint Spoofer** - `backend/src/services/opsec/fingerprintSpoofer.ts` ✅
+  - Rotation User-Agent
+  - Headers spoofing
+  - WebGL/Canvas fingerprint
+  - JA3 TLS fingerprint
+  
+- [x] **OPSEC Manager v2** - `backend/src/services/opsecManager.ts` ✅ ENRICHIS
+  - Intégration Tor Manager (startTorManager, stopTorManager, rotateTorIdentity)
+  - Intégration Proxy Rotator (initProxyRotator, requestWithProxy)
+  - Intégration Data Vault (initDataVault, saveSensitiveData, wipeAllData)
+  - Intégration Fingerprint Spoofer (generateAdvancedFingerprint, getSpoofedHeaders)
+  - Full Health Check (tor + vault)
+  
+- [x] **Tool Runner Core** - `backend/src/services/toolRunner.ts` ✅
+  - Auto-installation des outils (pip/npm/go/docker/git)
+  - Exécution parallèle avec gestion des ressources
+  - Parsing des résultats (JSON, XML, regex, custom)
+  - Intégration OPSEC (Tor/Proxy/Fingerprint)
+  - Gestion des timeouts et retries
+  - Health check des outils
+
+### ✅ Phase 2: UI v2 Implementation (EN COURS - 17 Avril 2026)
+
+#### 2.1 Setup Shadcn UI ✅
+- [x] **Configuration** - `components.json` créé
+- [x] **Variables CSS** - Ajout des variables Shadcn au `index.css`
+- [x] **Theme Google Dark** - Palette 90% noir/blanc, accents cyan/purple
+- [x] **Composants de base**:
+  - `Button` - Variants primary/outline/ghost avec glow cyan
+  - `Card` - Cartes sombres avec border subtle
+
+#### 2.2 Hero Section ✅
+- [x] **Gradient text animé** - cyan → purple → rose
+- [x] **Particules subtiles** - Canvas avec connexions
+- [x] **Glow effect** - Dégradé flou derrière le titre
+- [x] **CTA Buttons** - Style Google Dark avec glow cyan
+- [x] **Animations** - Framer Motion (fade-up stagger)
+- [x] **Stats** - 1000+ outils, 500+ sources, 100% Open Source
+- [x] **Scroll indicator** - Animation de scroll
+
+#### 2.3 Dark Sidebar ✅
+- [x] **Navigation complète** - Investigation + System sections
+- [x] **Accents cyan** - Glow sur éléments actifs
+- [x] **Status indicators** - OPSEC active, running states
+- [x] **Collapsible** - Animation smooth
+- [x] **Footer OPSEC** - Stats en temps réel
+
+#### 2.4 Dashboard Cards ✅
+- [x] **Stat Cards** - 4 cartes avec progress bars colorés
+- [x] **Status Cards** - Tor, Proxy, Vault status
+- [x] **Activity Feed** - Timeline des actions récentes
+- [x] **Quick Tools** - Grid de 6 outils rapides
+- [x] **Effet wow** - Glow sur valeurs importantes
+
+#### 2.5 Prochaines étapes
+- [ ] **Integration** - Connecter Sidebar + Dashboard à App.tsx
+- [ ] **Tool Runner UI** - Pulse animations lors exécution
+
+### Phase 3: Docker Booster (À VENIR)
+- [ ] Dockerfile.tools
+- [ ] Tor proxy container
+- [ ] Docker Compose stack
 
 ### Phase 4: UI v2 Implementation
 - [ ] Setup Shadcn UI
