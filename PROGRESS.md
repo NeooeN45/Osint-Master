@@ -438,7 +438,34 @@ Amélioration du backend pour accepter les modifications à chaud et la mise à 
 ### Phase 5: Docker Booster (COMPLÈTE - intégré Phase 3)
 - [ ] VPN integration
 
-### Phase 6: Features Additionnelles
+### Phase 6: Améliorations Système (COMPLÈTE - 17 Avril 2026)
+Améliorations du backend pour monitoring, performance et stabilité.
+
+- [x] **Bug Fix** - dockerManager.ts: propriété isTor manquante
+- [x] **MonitoringService** (`backend/src/services/monitoring.ts`)
+  - Métriques système: CPU, RAM, Disk, Network
+  - Métriques Docker: containers, images, volumes, networks
+  - Métriques applicatives: requests, errors, latency p95/p99
+  - Alertes automatiques avec seuils configurables
+  - Health checks avec response time
+  - Dashboard data pour frontend
+  
+- [x] **Monitoring Routes** (`backend/src/routes/monitoring.ts`)
+  - GET /monitoring/dashboard - Vue d'ensemble
+  - GET /monitoring/system - Métriques temps réel
+  - GET /monitoring/docker - Statut containers
+  - GET /monitoring/alerts - Alertes actives
+  - PUT /monitoring/alerts/thresholds - Config seuils
+
+- [x] **CacheService** (`backend/src/services/cacheService.ts`)
+  - Redis client avec fallback mémoire
+  - Patterns: cache-aside, stale-while-revalidate
+  - TTL adaptatif par type d'outil OSINT
+  - Tags pour invalidation groupée
+  - Stats hit/miss rate
+  - Eviction LRU
+
+### Phase 7: Features Additionnelles (À VENIR)
 - [ ] InstagramPrivSniffer module
 - [ ] Three.js globe visualization
 - [ ] Advanced correlation graph
