@@ -56,7 +56,9 @@ const axget = (url: string, cfg: any = {}) => {
   const extraAuth = igAuthHeaders();
   const headers = { ...extraAuth, ...(cfg.headers || {}) };
   return axios.get(url, {
-    httpsAgent: NO_SSL, validateStatus: () => true, timeout: 15000,
+    httpsAgent: NO_SSL,
+    validateStatus: () => true,
+    timeout: 15000,
     ...cfg,
     headers,
   } as any);
@@ -67,9 +69,11 @@ async function bingSearch(query: string, max: number = 20): Promise<string[]> {
   const urls: string[] = [];
   try {
     const r = await axios.get(`https://www.bing.com/search?q=${encodeURIComponent(query)}&count=${max}`, {
-      httpsAgent: NO_SSL, validateStatus: () => true, timeout: 15000,
+      httpsAgent: NO_SSL,
+      validateStatus: () => true,
+      timeout: 15000,
       headers: { "User-Agent": randUA(), "Accept-Language": "en-US,en;q=0.9" },
-    });
+    } as any);
     const html = String(r.data || "");
     const rx = /<a[^>]+href="(https?:\/\/[^"]+)"/gi;
     let m: RegExpExecArray | null;
@@ -85,9 +89,11 @@ async function ddgSearch(query: string, max: number = 20): Promise<string[]> {
   const urls: string[] = [];
   try {
     const r = await axios.get(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`, {
-      httpsAgent: NO_SSL, validateStatus: () => true, timeout: 15000,
+      httpsAgent: NO_SSL,
+      validateStatus: () => true,
+      timeout: 15000,
       headers: { "User-Agent": randUA() },
-    });
+    } as any);
     const html = String(r.data || "");
     const rx = /<a[^>]+class="result__url"[^>]+href="([^"]+)"/gi;
     let m: RegExpExecArray | null;

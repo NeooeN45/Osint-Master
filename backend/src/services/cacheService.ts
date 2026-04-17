@@ -12,8 +12,15 @@
  * Créé: 17 Avril 2026
  */
 
-import { createClient, RedisClientType } from 'redis';
 import { EventEmitter } from 'events';
+
+// Redis import optional (falls back to memory cache)
+let redis: any;
+try {
+  redis = require('redis');
+} catch {
+  console.log('[CacheService] Redis not available, using memory cache only');
+}
 
 // Types
 interface CacheEntry<T> {
@@ -42,7 +49,7 @@ interface CacheConfig {
 }
 
 export class CacheService extends EventEmitter {
-  private redis: RedisClientType | null = null;
+  private redis: any = null;
   private memoryCache: Map<string, CacheEntry<any>> = new Map();
   private stats: CacheStats = {
     hits: 0,
@@ -74,10 +81,12 @@ export class CacheService extends EventEmitter {
   // ═════════════════════════════════════════════════════════════════════════════
 
   private async initRedis(): Promise<void> {
+    if (!redis) return;
+    
     const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
     try {
-      this.redis = createClient({
+      this.redis = redis.createClient({
         url: redisUrl,
       });
 

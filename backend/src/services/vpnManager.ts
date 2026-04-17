@@ -393,10 +393,11 @@ export class VPNManager extends EventEmitter {
   private async getIPLocation(ip: string): Promise<{ country: string; city?: string; region?: string }> {
     try {
       const response = await axios.get(`https://ipinfo.io/${ip}/json`, { timeout: 10000 });
+      const data = response.data as any;
       return {
-        country: response.data.country || 'unknown',
-        city: response.data.city,
-        region: response.data.region,
+        country: data.country || 'unknown',
+        city: data.city,
+        region: data.region,
       };
     } catch {
       return { country: 'unknown' };
