@@ -7,6 +7,18 @@ import { googleDorker } from "../services/intelligence/GoogleDorker.js";
 
 export const dorksRouter = Router();
 
+// GET /api/dorks - Status endpoint
+dorksRouter.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "Google Dorking Pro",
+    endpoints: [
+      { method: "POST", path: "/generate", description: "Generate dorks for target" },
+      { method: "POST", path: "/execute", description: "Execute dorks with Bing API" },
+    ],
+  });
+});
+
 // POST /api/dorks/generate
 dorksRouter.post("/generate", (req, res) => {
   const { target, targetType, categories } = req.body;

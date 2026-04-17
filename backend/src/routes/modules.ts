@@ -18,7 +18,24 @@ const router = Router();
 // MODULE CATALOG
 // ==========================================================================
 
-// Get all modules
+// Get all modules (root endpoint)
+router.get("/", (req: Request, res: Response) => {
+  const modules = osintModules.map((m) => ({
+    id: m.id,
+    name: m.name,
+    category: m.category,
+    installed: m.installed,
+    enabled: m.enabled,
+    version: m.version,
+  }));
+
+  res.json({
+    count: modules.length,
+    modules,
+  });
+});
+
+// Get all modules (catalog endpoint)
 router.get("/catalog", (req: Request, res: Response) => {
   const { category, installed, enabled } = req.query;
 

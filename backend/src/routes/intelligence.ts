@@ -8,6 +8,18 @@ import { logger } from "../utils/logger";
 
 export const intelligenceRouter = Router();
 
+// Status endpoint
+intelligenceRouter.get("/status", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "Intelligence Engine",
+    endpoints: [
+      { method: "POST", path: "/analyze", description: "Analyze entities and provide insights" },
+      { method: "POST", path: "/explain", description: "Get explanation for specific entity" },
+    ],
+  });
+});
+
 // Analyze entities and provide explanations
 intelligenceRouter.post("/analyze", (req, res) => {
   try {
