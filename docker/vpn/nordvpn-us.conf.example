@@ -1,0 +1,23 @@
+# =============================================================================
+# NordVPN USA - WireGuard Configuration
+# =============================================================================
+#
+# NordVPN uses NordLynx (WireGuard-based). To get config:
+# 1. Install nordvpn CLI: https://nordvpn.com/download/
+# 2. Login: nordvpn login
+# 3. Connect with WireGuard: nordvpn set technology nordlynx
+# 4. Or get manual config from: https://nordvpn.com/blog/wireguard-setup/
+#
+# =============================================================================
+
+[Interface]
+PrivateKey = YOUR_NORDVPN_PRIVATE_KEY
+Address = 10.5.0.2/32
+DNS = 103.86.96.100, 103.86.99.100
+MTU = 1420
+
+[Peer]
+PublicKey = NORDVPN_SERVER_PUBLIC_KEY
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = us1234.nordvpn.com:51820
+PersistentKeepalive = 25

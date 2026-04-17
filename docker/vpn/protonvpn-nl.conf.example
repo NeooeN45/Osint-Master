@@ -1,0 +1,15 @@
+# =============================================================================
+# ProtonVPN Netherlands - WireGuard Configuration
+# =============================================================================
+
+[Interface]
+PrivateKey = YOUR_PRIVATE_KEY_HERE
+Address = 10.2.0.2/32
+DNS = 10.2.0.1
+MTU = 1420
+
+[Peer]
+PublicKey = SERVER_PUBLIC_KEY_HERE
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = 95.214.54.156:51820
+PersistentKeepalive = 25

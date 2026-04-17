@@ -1,0 +1,39 @@
+# =============================================================================
+# ProtonVPN Switzerland - WireGuard Configuration
+# =============================================================================
+# 
+# Instructions:
+# 1. Download your WireGuard config from ProtonVPN: https://account.protonvpn.com/downloads
+# 2. Rename this file to: protonvpn-ch.conf
+# 3. Replace the placeholder values below with your actual config
+# 4. Never commit .conf files with real keys to git!
+# 5. Add *.conf to .gitignore
+#
+# =============================================================================
+
+[Interface]
+# PrivateKey - Your private key from ProtonVPN
+PrivateKey = YOUR_PRIVATE_KEY_HERE
+
+# Address - Your internal VPN IP (usually /32)
+Address = 10.2.0.2/32
+
+# DNS - ProtonVPN DNS servers
+DNS = 10.2.0.1
+
+# Optional: MTU setting
+MTU = 1420
+
+[Peer]
+# PublicKey - ProtonVPN server public key
+PublicKey = SERVER_PUBLIC_KEY_HERE
+
+# AllowedIPs - Route all traffic through VPN (0.0.0.0/0) or split tunnel
+AllowedIPs = 0.0.0.0/0, ::/0
+
+# Endpoint - ProtonVPN server endpoint (CH = Switzerland)
+# Format: IP:port or hostname:port (usually 51820)
+Endpoint = 185.159.157.1:51820
+
+# PersistentKeepalive - Keep NAT mapping alive (25 seconds recommended)
+PersistentKeepalive = 25

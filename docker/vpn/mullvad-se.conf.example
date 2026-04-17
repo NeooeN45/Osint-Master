@@ -1,0 +1,30 @@
+# =============================================================================
+# Mullvad VPN Sweden - WireGuard Configuration
+# =============================================================================
+# 
+# Get your config from: https://mullvad.net/en/account/wireguard-config
+# 
+# =============================================================================
+
+[Interface]
+# Mullvad uses unique private keys per device
+PrivateKey = YOUR_MULLVAD_PRIVATE_KEY
+
+# Address - Assigned by Mullvad (format: xxx.xxx.xxx.xxx/32)
+Address = 10.64.xxx.xxx/32
+
+# DNS - Mullvad's ad-blocking DNS (or use 10.64.0.1 for regular)
+DNS = 100.64.0.7
+
+[Peer]
+# Public key of Mullvad's Sweden server
+PublicKey = se-sweden-server-public-key
+
+# Mullvad allows all IPs through VPN
+AllowedIPs = 0.0.0.0/0, ::/0
+
+# Sweden server endpoint (stockholm or other)
+Endpoint = se-sto-wg-001.mullvad.net:51820
+
+# Keepalive for NAT
+PersistentKeepalive = 25

@@ -3,3 +3,38 @@ dist/
 .env
 .env.local
 *.log
+
+# VPN Configurations (security - never commit real keys!)
+docker/vpn/*.conf
+!docker/vpn/*.conf.example
+*.pem
+*.key
+
+# OSINT Data (privacy)
+results/
+investigations/
+downloads/
+cache/
+
+# Docker volumes
+docker-volumes/
+volumes/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+test-results/
+coverage/
+.nyc_output/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
