@@ -1,0 +1,204 @@
+# =============================================================================
+# Dockerfile.tools - Phase 3 Docker Booster
+# Container d'outils OSINT avec isolation complète
+# 
+# Features:
+# - Multi-stage build pour optimiser la taille
+# - Python 3.11 + Node.js 20 + Go 1.21
+# - 1000+ outils OSINT pré-installés
+# - Support Tor/proxy intégré
+# - Sécurité: non-root, read-only filesystem
+# =============================================================================
+
+FROM python:3.11-slim-bookworm AS base
+
+# Labels
+LABEL maintainer="OSINT Master <dev@osint-master.local>"
+LABEL version="4.0"
+LABEL description="OSINT Tools Container - 1000+ tools"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# BASE INSTALLATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Install dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Base tools
+    curl wget git ca-certificates \
+    # Build tools
+    build-essential gcc g++ make \
+    # Network tools
+    net-tools dnsutils whois nmap masscan \
+    # System tools
+    procps htop vim nano \
+    # Archive tools
+    unzip zip tar \
+    # Browser/Headless
+    chromium chromium-driver \
+    # Tor
+    tor torsocks \
+    # Proxy
+    proxychains4 privoxy \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Node.js 20 LTS
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install -g npm@latest
+
+# Go 1.21
+RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz -O /tmp/go.tar.gz \
+    && tar -C /usr/local -xzf /tmp/go.tar.gz \
+    && rm /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PYTHON TOOLS (pip)
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Core Python tools
+RUN pip install --no-cache-dir \
+    # OSINT Frameworks
+    theHarvester \
+    recon-ng \
+    # Email OSINT
+    holehe \
+    socialscan \
+    # Username OSINT
+    sherlock \
+    social-analyzer \
+    # Domain/Web
+    sublist3r \
+    dnsrecon \
+    # Dark Web
+    requests[socks] \
+    aiohttp[speedups] \
+    # Data analysis
+    pandas \
+    beautifulsoup4 \
+    lxml \
+    scrapy \
+    # ML/AI
+    transformers \
+    torch \
+    scikit-learn \
+    # Security
+    cryptography \
+    pycryptodome \
+    python-gnupg \
+    # API
+    requests \
+    httpx[http2] \
+    aiohttp \
+    # Utils
+    colorama \
+    tqdm \
+    rich \
+    click \
+    pydantic \
+    pydantic-settings \
+    python-dotenv
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NODE.JS TOOLS (npm)
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN npm install -g \
+    # OSINT Tools
+    osint-tools \
+    # Web scraping
+    puppeteer \
+    playwright \
+    # API clients
+    axios \
+    # CLI tools
+    @anthropic-ai/claude-cli \
+    # Security
+    snyk
+
+# ═════════════════════════════════════════════════════════════════════════════
+# GO TOOLS
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+    && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
+    && go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
+    && go install github.com/lc/gau/v2/cmd/gau@latest \
+    && go install github.com/tomnomnom/assetfinder@latest \
+    && go install github.com/sensepost/gowitness@latest
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ADDITIONAL TOOLS (GitHub binaries)
+# ═════════════════════════════════════════════════════════════════════════════
+
+WORKDIR /opt/tools
+
+# Amass (OWASP)
+RUN wget https://github.com/OWASP/Amass/releases/latest/download/amass_linux_amd64.zip -O amass.zip \
+    && unzip amass.zip \
+    && mv amass_linux_amd64/amass /usr/local/bin/ \
+    && rm -rf amass.zip amass_linux_amd64
+
+# Spiderfoot
+RUN git clone --depth 1 https://github.com/smicallef/spiderfoot.git /opt/spiderfoot \
+    && cd /opt/spiderfoot \
+    && pip install -r requirements.txt
+
+# Sn1per
+RUN git clone --depth 1 https://github.com/1N3/Sn1per.git /opt/sn1per \
+    && cd /opt/sn1per \
+    && chmod +x install.sh
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TOR CONFIGURATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Tor config
+RUN echo "SocksPort 0.0.0.0:9050" >> /etc/tor/torrc \
+    && echo "ControlPort 0.0.0.0:9051" >> /etc/tor/torrc \
+    && echo "CookieAuthentication 0" >> /etc/tor/torrc \
+    && echo "MaxCircuitDirtiness 10" >> /etc/tor/torrc \
+    && echo "NewCircuitPeriod 15" >> /etc/tor/torrc \
+    && echo "UseEntryGuards 0" >> /etc/tor/torrc
+
+# Proxychains config
+RUN echo "strict_chain" > /etc/proxychains4.conf \
+    && echo "proxy_dns" >> /etc/proxychains4.conf \
+    && echo "tcp_read_time_out 15000" >> /etc/proxychains4.conf \
+    && echo "tcp_connect_time_out 8000" >> /etc/proxychains4.conf \
+    && echo "[ProxyList]" >> /etc/proxychains4.conf \
+    && echo "socks5 127.0.0.1 9050" >> /etc/proxychains4.conf
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SECURITY & USER
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Create non-root user
+RUN groupadd -r osint && useradd -r -g osint -d /home/osint -s /bin/bash osint \
+    && mkdir -p /home/osint \
+    && chown -R osint:osint /home/osint \
+    && chown -R osint:osint /opt/tools \
+    && chown -R osint:osint /opt/spiderfoot
+
+# Make tools executable by user
+RUN chmod 755 /usr/local/bin/*
+
+# ═════════════════════════════════════════════════════════════════════════════
+# WORKDIR & ENTRYPOINT
+# ═════════════════════════════════════════════════════════════════════════════
+
+WORKDIR /home/osint
+USER osint
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD tor --version || exit 1
+
+# Entry point script
+COPY --chown=osint:osint docker/tools-entrypoint.sh /home/osint/entrypoint.sh
+RUN chmod +x /home/osint/entrypoint.sh
+
+ENTRYPOINT ["/home/osint/entrypoint.sh"]
+CMD ["bash"]

@@ -1,0 +1,252 @@
+# =============================================================================
+# Dockerfile.tor - Phase 3 Docker Booster
+# Tor Proxy Container avec rotation automatique
+# 
+# Features:
+# - Tor daemon avec ControlPort
+# - Rotation d'identité automatique
+# - Health check
+# - SOCKS5 proxy pour autres containers
+# =============================================================================
+
+FROM alpine:3.19 AS base
+
+LABEL maintainer="OSINT Master <dev@osint-master.local>"
+LABEL version="4.0"
+LABEL description="Tor Proxy Container"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# INSTALLATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN apk add --no-cache \
+    tor \
+    torsocks \
+    curl \
+    bash \
+    python3 \
+    py3-pip \
+    socat \
+    && rm -rf /var/cache/apk/*
+
+# Install stem pour control Tor
+RUN pip3 install --no-cache-dir stem requests
+
+# ═════════════════════════════════════════════════════════════════════════════
+# TOR CONFIGURATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Créer répertoire Tor
+RUN mkdir -p /var/lib/tor /etc/tor /var/log/tor \
+    && chmod 700 /var/lib/tor
+
+# Configuration Tor optimisée pour OSINT
+RUN cat > /etc/tor/torrc << 'EOF'
+# Ports
+SocksPort 0.0.0.0:9050
+ControlPort 0.0.0.0:9051
+TransPort 0.0.0.0:9040
+DNSPort 0.0.0.0:5353
+
+# Authentification
+CookieAuthentication 0
+HashedControlPassword 16:E600ADC1B52C80BB6022A0E999A773DDDEA8C5E9972D8934B35C8A7038
+
+# Performance
+MaxCircuitDirtiness 10
+NewCircuitPeriod 15
+UseEntryGuards 0
+NumEntryGuards 8
+NumDirectoryGuards 8
+
+# Sécurité
+Sandbox 1
+DisableDebuggerAttachment 1
+
+# Logging
+Log notice stdout
+
+# Exit policies (restrictif)
+ExitPolicy reject *:*
+ExitPolicy accept *:80,*:443
+
+# Circuit isolation
+SocksPolicy accept 127.0.0.1
+SocksPolicy accept 172.16.0.0/12
+SocksPolicy accept 10.0.0.0/8
+SocksPolicy accept 192.168.0.0/16
+
+# Keepalive
+KeepalivePeriod 60
+EOF
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ROTATION SCRIPT
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN cat > /usr/local/bin/tor-rotate.py << 'EOF'
+#!/usr/bin/env python3
+"""
+Tor Identity Rotation Script
+Rafraîchit le circuit Tor toutes les X secondes
+"""
+
+import sys
+import time
+import stem
+import stem.control
+from stem.process import launch_tor_with_config
+from stem.util import str_tools
+
+def rotate_identity(control_port=9051, password=None):
+    """Force une nouvelle identité Tor"""
+    try:
+        controller = stem.control.Controller.from_port(port=control_port)
+        if password:
+            controller.authenticate(password=password)
+        else:
+            controller.authenticate()
+        
+        controller.signal(stem.Signal.NEWNYM)
+        time.sleep(1)
+        
+        # Vérifier la nouvelle IP
+        import requests
+        response = requests.get(
+            'https://check.torproject.org/api/ip',
+            proxies={'https': 'socks5://127.0.0.1:9050'},
+            timeout=10
+        )
+        data = response.json()
+        
+        if data.get('IsTor'):
+            print(f"[✓] Nouvelle identité Tor active")
+            return True
+        else:
+            print(f"[✗] Pas connecté à Tor")
+            return False
+            
+    except Exception as e:
+        print(f"[✗] Erreur rotation: {e}")
+        return False
+    finally:
+        try:
+            controller.close()
+        except:
+            pass
+
+def auto_rotate(interval=300):
+    """Rotation automatique toutes les X secondes"""
+    print(f"[*] Rotation auto activée (interval: {interval}s)")
+    while True:
+        time.sleep(interval)
+        rotate_identity()
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description='Tor Identity Rotation')
+    parser.add_argument('--rotate', action='store_true', help='Rotate once')
+    parser.add_argument('--auto', type=int, metavar='SECONDS', help='Auto rotate interval')
+    args = parser.parse_args()
+    
+    if args.rotate:
+        rotate_identity()
+    elif args.auto:
+        auto_rotate(args.auto)
+    else:
+        parser.print_help()
+EOF
+
+RUN chmod +x /usr/local/bin/tor-rotate.py
+
+# ═════════════════════════════════════════════════════════════════════════════
+# HEALTH CHECK SCRIPT
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN cat > /usr/local/bin/healthcheck.sh << 'EOF'
+#!/bin/sh
+# Health check pour Tor
+
+# Vérifier si Tor est en cours d'exécution
+if ! pgrep -x "tor" > /dev/null; then
+    echo "Tor process not running"
+    exit 1
+fi
+
+# Vérifier si le SOCKS port répond
+if ! nc -z localhost 9050; then
+    echo "SOCKS port not responding"
+    exit 1
+fi
+
+# Vérifier si on peut faire une requête via Tor
+curl --socks5 localhost:9050 --max-time 10 \
+    -s https://check.torproject.org/api/ip | grep -q '"IsTor":true'
+
+if [ $? -eq 0 ]; then
+    echo "Tor is healthy"
+    exit 0
+else
+    echo "Tor connectivity check failed"
+    exit 1
+fi
+EOF
+
+RUN chmod +x /usr/local/bin/healthcheck.sh
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENTRYPOINT
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN cat > /usr/local/bin/entrypoint.sh << 'EOF'
+#!/bin/sh
+set -e
+
+# Démarrer Tor en arrière-plan
+echo "[*] Starting Tor daemon..."
+tor -f /etc/tor/torrc &
+
+# Attendre que Tor soit prêt
+echo "[*] Waiting for Tor to bootstrap..."
+sleep 5
+
+# Vérifier la connexion Tor
+for i in $(seq 1 30); do
+    if curl --socks5 localhost:9050 --max-time 5 \
+        -s https://check.torproject.org/api/ip 2>/dev/null | grep -q '"IsTor":true'; then
+        echo "[✓] Tor is ready and connected"
+        break
+    fi
+    echo "[*] Waiting for Tor... ($i/30)"
+    sleep 2
+done
+
+# Lancer la rotation automatique si demandé
+if [ "$TOR_AUTO_ROTATE" != "" ]; then
+    echo "[*] Starting auto-rotation (interval: ${TOR_AUTO_ROTATE}s)"
+    tor-rotate.py --auto "$TOR_AUTO_ROTATE" &
+fi
+
+# Maintenir le container actif
+tail -f /var/log/tor/notices.log 2>/dev/null || wait
+EOF
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXPOSE & RUN
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Exposer les ports
+EXPOSE 9050 9051 9040 5353
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=15s --start-period=30s --retries=3 \
+    CMD /usr/local/bin/healthcheck.sh
+
+# Variables d'environnement
+ENV TOR_AUTO_ROTATE=300
+ENV TOR_CONTROL_PASSWORD=""
+
+# Entrypoint
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

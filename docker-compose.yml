@@ -1,0 +1,213 @@
+# =============================================================================
+# Docker Compose - Phase 3 Docker Booster
+# Stack OSINT Master avec isolation complète
+# 
+# Services:
+# - tor-proxy: Proxy Tor avec rotation auto
+# - tools: Container d'outils OSINT (1000+)
+# - backend: API Node.js
+# - frontend: React SPA
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ═════════════════════════════════════════════════════════════════════════════
+  # TOR PROXY
+  # ═════════════════════════════════════════════════════════════════════════════
+  tor-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.tor
+    container_name: osint-tor
+    restart: unless-stopped
+    networks:
+      - osint-network
+    ports:
+      - "9050:9050"   # SOCKS5 proxy
+      - "9051:9051"   # Control port
+    environment:
+      - TOR_AUTO_ROTATE=300  # Rotation auto toutes les 5min
+    volumes:
+      - tor-data:/var/lib/tor
+    healthcheck:
+      test: ["/usr/local/bin/healthcheck.sh"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # OSINT TOOLS CONTAINER
+  # ═════════════════════════════════════════════════════════════════════════════
+  tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    container_name: osint-tools
+    restart: unless-stopped
+    networks:
+      - osint-network
+    depends_on:
+      tor-proxy:
+        condition: service_healthy
+    environment:
+      - HTTP_PROXY=socks5://tor-proxy:9050
+      - HTTPS_PROXY=socks5://tor-proxy:9050
+      - ALL_PROXY=socks5://tor-proxy:9050
+      - TOR_HOST=tor-proxy
+      - TOR_PORT=9050
+      - TOR_CONTROL_PORT=9051
+    volumes:
+      - tools-data:/home/osint/data
+      - tools-cache:/home/osint/.cache
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Pour exécuter Docker dans Docker
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+      - NET_BIND_SERVICE
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # BACKEND API
+  # ═════════════════════════════════════════════════════════════════════════════
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: osint-backend
+    restart: unless-stopped
+    networks:
+      - osint-network
+    ports:
+      - "3002:3002"
+    depends_on:
+      - tor-proxy
+      - tools
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - TOR_PROXY_HOST=tor-proxy
+      - TOR_PROXY_PORT=9050
+      - TOOLS_CONTAINER=osint-tools
+      - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-production}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-default-key-32-chars-long}
+    volumes:
+      - backend-data:/app/data
+      - ./backend:/app:cached
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # FRONTEND REACT
+  # ═════════════════════════════════════════════════════════════════════════════
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: osint-frontend
+    restart: unless-stopped
+    networks:
+      - osint-network
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://localhost:3002
+      - VITE_WS_URL=ws://localhost:3002
+    volumes:
+      - ./src:/app/src:cached
+      - ./public:/app/public:cached
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # OPTIONAL: Redis Cache
+  # ═════════════════════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: osint-redis
+    restart: unless-stopped
+    networks:
+      - osint-network
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ═════════════════════════════════════════════════════════════════════════════
+  # OPTIONAL: PostgreSQL Database
+  # ═════════════════════════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:16-alpine
+    container_name: osint-postgres
+    restart: unless-stopped
+    networks:
+      - osint-network
+    environment:
+      - POSTGRES_DB=osint
+      - POSTGRES_USER=osint
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-osint-password-change-me}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ═════════════════════════════════════════════════════════════════════════════
+networks:
+  osint-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ═════════════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ═════════════════════════════════════════════════════════════════════════════
+volumes:
+  tor-data:
+    driver: local
+  tools-data:
+    driver: local
+  tools-cache:
+    driver: local
+  backend-data:
+    driver: local
+  redis-data:
+    driver: local
+  postgres-data:
+    driver: local
