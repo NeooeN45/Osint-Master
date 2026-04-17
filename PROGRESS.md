@@ -354,9 +354,22 @@ git push origin main
 - [x] **Navigation** - Toggle Hero, sidebar collapsible
 - [x] **Export** - Ajouté à `views/index.ts`
 
-#### 2.6 Prochaines étapes
-- [ ] **Tool Runner UI** - Pulse animations lors exécution
-- [ ] **Route App.tsx** - Intégrer DashboardV2 dans l'app principale
+#### 2.6 Tool Runner UI ✅
+- [x] **Interface exécution** - Grid des outils disponibles
+- [x] **Animations pulse** - Indicateurs cyan clignotants pendant exécution
+- [x] **Log streaming** - Output en temps réel avec curseur
+- [x] **Gestion d'états** - Pending / Running / Completed / Failed / Cancelled
+- [x] **Résultats formatés** - Summary avec statistiques
+- [x] **Navigation** - Intégration dans DashboardV2 (route 'tools')
+
+#### 2.7 Phase 2 COMPLÈTE ✅
+**Session 17 Avril 2026 - UI v2 Google Dark Minimalist**
+- Palette: 90% noir/blanc, 10% accents cyan/purple/rose
+- Composants: Hero, Sidebar, DashboardCards, ToolRunnerUI
+- Animations: Framer Motion, pulse effects, gradient glows
+- Integration: DashboardV2 avec navigation
+
+---
 
 ### Phase 3: Docker Booster (À VENIR)
 - [ ] Dockerfile.tools
