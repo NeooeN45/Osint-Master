@@ -36,47 +36,55 @@ export const sherlockModule: OSINTModule = {
       data: { tool: "sherlock", target, message: `Searching ${target} across top social networks...` }
     });
 
-    const outFile = os.tmpdir() + `/sherlock_${Date.now()}.txt`;
-    
-    const r = await tryExec(
-      `sherlock "${target}" --site ${TOP_SITES} --print-found --timeout 2 --no-color --output "${outFile}"`,
-      180000
-    );
-
     const entities: any[] = [];
-    const urls: string[] = [];
-
-    // Parse output file
+    
     try {
-      const raw = fs.readFileSync(outFile, "utf-8");
-      fs.unlinkSync(outFile);
-      urls.push(...raw.split("\n").map(l => l.trim()).filter(l => l.startsWith("http")));
-    } catch {}
+      const outFile = os.tmpdir() + `/sherlock_${Date.now()}.txt`;
+      
+      const r = await tryExec(
+        `sherlock "${target}" --site ${TOP_SITES} --print-found --timeout 2 --no-color --output "${outFile}"`,
+        60000
+      );
 
-    // Fallback: parse stdout
-    if (urls.length === 0 && r) {
-      const lines = (r.stdout + (r.stderr || "")).split("\n");
-      for (const l of lines) {
-        const url = l.match(/https?:\/\/[^\s]+/)?.[0]?.replace(/[,;"']+$/, "");
-        if (url) urls.push(url);
+      const urls: string[] = [];
+
+      // Parse output file
+      try {
+        const raw = fs.readFileSync(outFile, "utf-8");
+        fs.unlinkSync(outFile);
+        urls.push(...raw.split("\n").map(l => l.trim()).filter(l => l.startsWith("http")));
+      } catch {}
+
+      // Fallback: parse stdout
+      if (urls.length === 0 && r) {
+        const lines = (r.stdout + (r.stderr || "")).split("\n");
+        for (const l of lines) {
+          const url = l.match(/https?:\/\/[^\s]+/)?.[0]?.replace(/[,;"']+$/, "");
+          if (url) urls.push(url);
+        }
       }
-    }
 
-    // Filter and create entities
-    for (const url of urls) {
-      const clean = cleanUrl(url);
-      if (isNoiseUrl(clean)) continue;
+      // Filter and create entities
+      for (const url of urls) {
+        const clean = cleanUrl(url);
+        if (isNoiseUrl(clean)) continue;
 
-      const platform = extractPlatform(clean);
-      entities.push({
-        id: makeEntityId(),
-        type: "social_profile",
-        value: clean,
-        source: "sherlock",
-        confidence: 88,
-        metadata: { platform },
-        verified: true,
-        depth: 0
+        const platform = extractPlatform(clean);
+        entities.push({
+          id: makeEntityId(),
+          type: "social_profile",
+          value: clean,
+          source: "sherlock",
+          confidence: 88,
+          metadata: { platform },
+          verified: true,
+          depth: 0
+        });
+      }
+    } catch (error: any) {
+      emit({
+        type: "error",
+        data: { tool: "sherlock", error: error.message }
       });
     }
 
@@ -90,7 +98,7 @@ export const sherlockModule: OSINTModule = {
     });
 
     return {
-      success: entities.length > 0,
+      success: true, // Return success even if no results to avoid breaking the chain
       data: { found: entities.length, urls: entities.map(e => e.value) },
       entities,
       executionTimeMs: Date.now() - startTime

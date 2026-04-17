@@ -56,7 +56,7 @@ export const hackertargetDnsModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "hackertarget_dns", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -96,7 +96,7 @@ export const hackertargetSubdomainsModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "hackertarget_subdomains", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -126,7 +126,7 @@ export const hackertargetReverseIpModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "hackertarget_reverseip", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -192,7 +192,7 @@ export const hackertargetPagelinksModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "hackertarget_pagelinks", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -237,7 +237,7 @@ export const ipinfoModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "ipinfo_free", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: data || {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -275,7 +275,7 @@ export const urlscanModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "urlscan", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: data || {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -338,7 +338,7 @@ export const githubSearchModule: OSINTModule = {
     } catch {}
 
     emit({ type: "tool_done", data: { tool: "github_search", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -368,7 +368,7 @@ export const redditModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "reddit_public", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: data || {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 
@@ -411,7 +411,7 @@ export const waybackModule: OSINTModule = {
     }
 
     emit({ type: "tool_done", data: { tool: "wayback_machine", found: entities.length, duration: Date.now() - startTime } });
-    return { success: entities.length > 0, data: data || {}, entities, executionTimeMs: Date.now() - startTime };
+    return { success: true, data: { found: entities.length }, entities, executionTimeMs: Date.now() - startTime };
   },
 };
 

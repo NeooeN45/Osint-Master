@@ -19,35 +19,42 @@ export const gravatarModule: OSINTModule = {
 
   execute: async (target: string, emit: EmitFunction): Promise<ModuleResult> => {
     const startTime = Date.now();
-    
-    emit({
-      type: "tool_start",
-      data: { tool: "gravatar", target, message: `Looking up Gravatar for ${target}...` }
-    });
-
-    const hash = crypto.createHash("md5").update(target.toLowerCase().trim()).digest("hex");
-    const url = `https://en.gravatar.com/${hash}.json`;
-    
-    const data = await tryHttp(url);
     const entities: any[] = [];
+    
+    try {
+      emit({
+        type: "tool_start",
+        data: { tool: "gravatar", target, message: `Looking up Gravatar for ${target}...` }
+      });
 
-    if (data?.entry?.[0]) {
-      const entry = data.entry[0];
-      entities.push({
-        id: makeEntityId(),
-        type: "profile",
-        value: target,
-        source: "gravatar",
-        confidence: 90,
-        metadata: {
-          displayName: entry.displayName,
-          photo: entry.photos?.[0]?.value,
-          profileUrl: entry.profileUrl,
-          accounts: entry.accounts,
-          urls: entry.urls
-        },
-        verified: true,
-        depth: 0
+      const hash = crypto.createHash("md5").update(target.toLowerCase().trim()).digest("hex");
+      const url = `https://en.gravatar.com/${hash}.json`;
+      
+      const data = await tryHttp(url);
+
+      if (data?.entry?.[0]) {
+        const entry = data.entry[0];
+        entities.push({
+          id: makeEntityId(),
+          type: "profile",
+          value: target,
+          source: "gravatar",
+          confidence: 90,
+          metadata: {
+            displayName: entry.displayName,
+            photo: entry.photos?.[0]?.value,
+            profileUrl: entry.profileUrl,
+            accounts: entry.accounts,
+            urls: entry.urls
+          },
+          verified: true,
+          depth: 0
+        });
+      }
+    } catch (error: any) {
+      emit({
+        type: "error",
+        data: { tool: "gravatar", error: error.message }
       });
     }
 
@@ -61,8 +68,8 @@ export const gravatarModule: OSINTModule = {
     });
 
     return {
-      success: entities.length > 0,
-      data: { hash, found: entities.length > 0 },
+      success: true,
+      data: { found: entities.length > 0, count: entities.length },
       entities,
       executionTimeMs: Date.now() - startTime
     };

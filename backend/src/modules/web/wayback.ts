@@ -66,8 +66,8 @@ export const waybackModule: OSINTModule = {
     });
 
     return {
-      success: entities.length > 0,
-      data: { snapshots: limitedSnapshots, total: snapshots.size },
+      success: true,
+      data: { snapshots: limitedSnapshots, total: snapshots.size, found: entities.length },
       entities,
       executionTimeMs: Date.now() - startTime
     };

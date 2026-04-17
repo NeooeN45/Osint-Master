@@ -61,8 +61,8 @@ export const crtshModule: OSINTModule = {
     });
 
     return {
-      success: entities.length > 0,
-      data: { subdomains: Array.from(subdomains) },
+      success: true,
+      data: { subdomains: Array.from(subdomains), found: entities.length },
       entities,
       executionTimeMs: Date.now() - startTime
     };

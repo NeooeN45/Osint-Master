@@ -1,0 +1,338 @@
+{
+  "timestamp": "2026-04-17T18:17:38.204Z",
+  "totalModules": 15,
+  "testedModules": 15,
+  "availablePassed": 15,
+  "availableFailed": 0,
+  "executionPassed": 3,
+  "executionFailed": 12,
+  "notTested": 0,
+  "results": [
+    {
+      "moduleId": "sherlock",
+      "name": "Sherlock",
+      "category": "username",
+      "targetTypes": [
+        "username"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 1894
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 9371,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "maigret",
+      "name": "Maigret",
+      "category": "username",
+      "targetTypes": [
+        "username"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 2103
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 15013,
+        "entitiesFound": 0,
+        "error": "Execution timeout"
+      }
+    },
+    {
+      "moduleId": "gravatar",
+      "name": "Gravatar",
+      "category": "email",
+      "targetTypes": [
+        "email"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 480,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "crtsh",
+      "name": "crt.sh",
+      "category": "domain",
+      "targetTypes": [
+        "domain"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": true,
+        "duration": 1338,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "wayback",
+      "name": "Wayback Machine",
+      "category": "web",
+      "targetTypes": [
+        "url",
+        "domain"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 15013,
+        "entitiesFound": 0,
+        "error": "Execution timeout"
+      }
+    },
+    {
+      "moduleId": "hackertarget_dns",
+      "name": "HackerTarget DNS Lookup",
+      "category": "domain",
+      "targetTypes": [
+        "domain"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 435,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "hackertarget_subdomains",
+      "name": "HackerTarget Subdomain Search",
+      "category": "domain",
+      "targetTypes": [
+        "domain"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 107,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "hackertarget_reverseip",
+      "name": "HackerTarget Reverse IP",
+      "category": "ip",
+      "targetTypes": [
+        "ip",
+        "domain"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 211,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "hackertarget_geoip",
+      "name": "HackerTarget GeoIP",
+      "category": "ip",
+      "targetTypes": [
+        "ip"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 398,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "hackertarget_pagelinks",
+      "name": "HackerTarget Page Links",
+      "category": "domain",
+      "targetTypes": [
+        "domain",
+        "url"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 325,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "ipinfo_free",
+      "name": "IPInfo (Free)",
+      "category": "ip",
+      "targetTypes": [
+        "ip"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": true,
+        "duration": 203,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "urlscan",
+      "name": "URLScan.io",
+      "category": "domain",
+      "targetTypes": [
+        "domain",
+        "ip"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": true,
+        "duration": 324,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "github_search",
+      "name": "GitHub User & Repo Search",
+      "category": "username",
+      "targetTypes": [
+        "username",
+        "email"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 563,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "reddit_public",
+      "name": "Reddit Public Profile",
+      "category": "username",
+      "targetTypes": [
+        "username"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 273,
+        "entitiesFound": 0
+      }
+    },
+    {
+      "moduleId": "wayback_machine",
+      "name": "Wayback Machine",
+      "category": "domain",
+      "targetTypes": [
+        "domain",
+        "url"
+      ],
+      "isAvailable": {
+        "tested": true,
+        "passed": true,
+        "duration": 0
+      },
+      "execution": {
+        "tested": true,
+        "passed": false,
+        "duration": 15016,
+        "entitiesFound": 0,
+        "error": "Execution timeout"
+      }
+    }
+  ],
+  "byCategory": {
+    "username": {
+      "total": 4,
+      "available": 4,
+      "working": 0,
+      "failed": 4
+    },
+    "email": {
+      "total": 1,
+      "available": 1,
+      "working": 0,
+      "failed": 1
+    },
+    "domain": {
+      "total": 6,
+      "available": 6,
+      "working": 2,
+      "failed": 4
+    },
+    "web": {
+      "total": 1,
+      "available": 1,
+      "working": 0,
+      "failed": 1
+    },
+    "ip": {
+      "total": 3,
+      "available": 3,
+      "working": 1,
+      "failed": 2
+    }
+  }
+}
