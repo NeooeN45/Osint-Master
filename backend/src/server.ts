@@ -29,9 +29,23 @@ import { deepEngineV2 } from "./services/DeepEngineV2";
 import { configRouter } from "./routes/config";
 import { dorksRouter } from "./routes/dorks";
 import { instagramRouter } from "./routes/instagram";
+import modulesRouter from "./routes/modules";
+import { debugRouter, recordRequest, recordError } from "./routes/debug";
+import { moduleInstallerRouter } from "./routes/moduleInstaller";
 
 const PORT = process.env.PORT || 3002;
 const app = express();
+
+// Request tracking middleware (skip SSE streams to avoid double-counting)
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    if (!req.path.includes("/stream") && !req.path.includes("/investigate")) {
+      recordRequest(req.method, req.path, res.statusCode, Date.now() - start);
+    }
+  });
+  next();
+});
 
 // Register SSE streaming routes BEFORE helmet/json middleware to prevent buffering
 // Only cors is applied; JSON body is parsed inside the route handler
@@ -81,10 +95,14 @@ app.use("/api/auto-investigation", autoInvestigationRouter);
 // deepInvestigationV2Router already mounted above (SSE-safe, before helmet)
 app.use("/api/config", configRouter);
 app.use("/api/dorks", dorksRouter);
+app.use("/api/modules", modulesRouter);
+app.use("/api/debug", debugRouter);
+app.use("/api/installer", moduleInstallerRouter);
 
 // ---- Error handling ----
-app.use((err: any, _req: any, res: any, _next: any) => {
+app.use((err: any, req: any, res: any, _next: any) => {
   console.error("[ERROR]", err.message);
+  recordError(err.message, err.stack, req.path, { method: req.method, body: req.body });
   res.status(500).json({ error: err.message });
 });
 

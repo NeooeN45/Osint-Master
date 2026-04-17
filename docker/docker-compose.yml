@@ -1,54 +1,152 @@
-version: '3.8'
+# ============================================================================
+# OSINT Master Pro — Docker Compose v2
+# Backend API + Frontend nginx + Ollama AI + Redis cache + OSINT tools
+# ============================================================================
+version: '3.9'
 
 services:
-  # OSINT Tools Container - all tools pre-installed
-  osint-tools:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.osint-tools
-    container_name: osint-tools
-    volumes:
-      - osint-output:/osint/output
-      - osint-config:/osint/config
-    networks:
-      - osint-net
-    restart: unless-stopped
-    environment:
-      - SHODAN_API_KEY=${SHODAN_API_KEY:-}
-      - HIBP_API_KEY=${HIBP_API_KEY:-}
-      - NUMVERIFY_API_KEY=${NUMVERIFY_API_KEY:-}
-      - IPINFO_TOKEN=${IPINFO_TOKEN:-}
-      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY:-}
 
-  # Backend API
+  # ─── Backend API (Node.js + Python) ────────────────────────────────────────
   backend:
     build:
       context: ..
       dockerfile: docker/Dockerfile.backend
     container_name: osint-backend
+    restart: unless-stopped
     ports:
-      - "3002:3002"
+      - "${BACKEND_PORT:-3002}:3002"
     volumes:
       - osint-output:/app/output
+      - osint-reports:/app/reports
+      - osint-results:/app/results
+      - ./backend/.env:/app/.env:ro
     networks:
       - osint-net
-    depends_on:
-      - osint-tools
     environment:
       - PORT=3002
-      - OLLAMA_URL=http://host.docker.internal:11434
-      - OSINT_CONTAINER=osint-tools
+      - NODE_ENV=production
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mistral}
+      - REDIS_URL=redis://redis:6379
       - SHODAN_API_KEY=${SHODAN_API_KEY:-}
       - HIBP_API_KEY=${HIBP_API_KEY:-}
       - NUMVERIFY_API_KEY=${NUMVERIFY_API_KEY:-}
       - IPINFO_TOKEN=${IPINFO_TOKEN:-}
       - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY:-}
+      - RAPIDAPI_KEY=${RAPIDAPI_KEY:-}
+      - HUNTER_API_KEY=${HUNTER_API_KEY:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - VIRUSTOTAL_KEY=${VIRUSTOTAL_KEY:-}
+      - INTELX_API_KEY=${INTELX_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3002/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─── Frontend (nginx + Vite build) ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: /api
+    container_name: osint-frontend
     restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    networks:
+      - osint-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ─── Ollama AI (local LLM) ─────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: osint-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - osint-net
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    # GPU (décommenter si NVIDIA GPU dispo)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - capabilities: [gpu]
+
+  # ─── Redis (cache + queue) ─────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: osint-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - osint-net
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ─── OSINT Tools (optionnel — utilise Dockerfile.osint-tools existant) ─────
+  osint-tools:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.osint-tools
+    container_name: osint-tools
+    restart: unless-stopped
+    volumes:
+      - osint-output:/osint/output
+      - osint-config:/osint/config
+    networks:
+      - osint-net
+    environment:
+      - SHODAN_API_KEY=${SHODAN_API_KEY:-}
+      - HIBP_API_KEY=${HIBP_API_KEY:-}
+      - NUMVERIFY_API_KEY=${NUMVERIFY_API_KEY:-}
+      - IPINFO_TOKEN=${IPINFO_TOKEN:-}
+    profiles:
+      - tools  # Lancé uniquement avec --profile tools
 
 volumes:
   osint-output:
+    driver: local
+  osint-reports:
+    driver: local
+  osint-results:
+    driver: local
   osint-config:
+    driver: local
+  ollama-data:
+    driver: local
+  redis-data:
+    driver: local
 
 networks:
   osint-net:
     driver: bridge
+    name: osint-net

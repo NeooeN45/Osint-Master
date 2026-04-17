@@ -1,20 +1,59 @@
-FROM node:20-slim
+# ============================================================================
+# OSINT Master Pro — Backend API (Node 20 + Python 3 + OSINT tools)
+# Multi-stage build optimisé
+# ============================================================================
 
+FROM node:20-slim AS deps
+WORKDIR /app
+COPY backend/package*.json ./
+RUN npm ci --omit=dev
+
+# ----------------------------------------------------------------------------
+FROM node:20-slim AS runtime
+
+# System tools : network utils + Python + Tesseract OCR + ExifTool
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    whois curl dnsutils nmap \
+    whois curl wget dnsutils nmap jq ca-certificates \
+    python3 python3-pip python3-venv \
+    tesseract-ocr libtesseract-dev \
+    libimage-exiftool-perl \
+    chromium chromium-driver \
+    git \
     && rm -rf /var/lib/apt/lists/*
+
+# Python packages for advanced analysis modules
+RUN pip install --no-cache-dir --break-system-packages \
+    Pillow pytesseract httpx requests beautifulsoup4 \
+    PicImageSearch
+
+# OSINT CLI tools
+RUN pip install --no-cache-dir --break-system-packages \
+    sherlock-project maigret holehe socialscan ignorant \
+    theHarvester instaloader email-validator \
+    python-whois shodan phoneinfoga
 
 WORKDIR /app
 
-# Copy backend
+# Copy deps from builder
+COPY --from=deps /app/node_modules ./node_modules
 COPY backend/package*.json ./
-RUN npm ci --production
 
+# Copy source
 COPY backend/ ./
 
-# Build TypeScript
+# Optional pre-build (non-blocking)
 RUN npx tsc || true
 
+# Create mount points
+RUN mkdir -p /app/output /app/results /app/reports
+
+# Healthcheck
+HEALTHCHECK --interval=20s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://localhost:3002/health || exit 1
+
 EXPOSE 3002
+
+ENV NODE_ENV=production
+ENV PORT=3002
 
 CMD ["npx", "tsx", "src/server.ts"]

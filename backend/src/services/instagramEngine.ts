@@ -5,9 +5,13 @@
 // ============================================================================
 
 import axios from "axios";
+import https from "https";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { extractPatterns } from "./socialDeepScan";
+
+// Bypass self-signed proxy SSL (corporate/school networks)
+const NO_SSL_AGENT = new https.Agent({ rejectUnauthorized: false });
 
 const execAsync = promisify(exec);
 
@@ -42,6 +46,10 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 const IG_APP_IDS = ["936619743392459", "1217981644879628", "1074698696650121"];
 function randAppId() { return IG_APP_IDS[Math.floor(Math.random() * IG_APP_IDS.length)]; }
 
+// Helper: axios.get avec SSL bypass
+const axget = (url: string, cfg: any = {}) => axios.get(url, { httpsAgent: NO_SSL_AGENT, validateStatus: () => true, ...cfg } as any);
+const axreq = (cfg: any) => (axios as any).request({ httpsAgent: NO_SSL_AGENT, validateStatus: () => true, ...cfg });
+
 // ============================================================================
 // MODULE 1 — PROFIL COMPLET (7 endpoints en cascade)
 // ============================================================================
@@ -61,7 +69,7 @@ export const IgProfileModule = {
     // ── Endpoint 1 : web_profile_info (API v1, la plus riche) ──
     if (!userData) {
       try {
-        const r = await axios.get(
+        const r = await axget(
           `https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`,
           {
             timeout: 12000,
@@ -83,7 +91,7 @@ export const IgProfileModule = {
     // ── Endpoint 2 : graphql query (ancienne API) ──
     if (!userData) {
       try {
-        const r = await axios.get(
+        const r = await axget(
           `https://www.instagram.com/${clean}/?__a=1&__d=dis`,
           {
             timeout: 10000,
@@ -99,7 +107,7 @@ export const IgProfileModule = {
     // ── Endpoint 3 : i.instagram.com API (mobile) ──
     if (!userData) {
       try {
-        const r = await axios.get(
+        const r = await axget(
           `https://i.instagram.com/api/v1/users/web_profile_info/?username=${clean}`,
           {
             timeout: 10000,
@@ -119,7 +127,7 @@ export const IgProfileModule = {
     // ── Endpoint 4 : scrape page HTML → window.__additionalDataLoaded ──
     if (!userData) {
       try {
-        const r = await axios.get(`https://www.instagram.com/${clean}/`, {
+        const r = await axget(`https://www.instagram.com/${clean}/`, {
           timeout: 12000,
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124",
@@ -181,7 +189,7 @@ export const IgProfileModule = {
     // ── Endpoint 5 : Picuki.com (proxy public, souvent accessible) ──
     if (!userData) {
       try {
-        const r = await axios.get(`https://www.picuki.com/profile/${clean}`, {
+        const r = await axget(`https://www.picuki.com/profile/${clean}`, {
           timeout: 10000,
           headers: { "User-Agent": randUA() },
           validateStatus: () => true,
@@ -205,7 +213,7 @@ export const IgProfileModule = {
     // ── Endpoint 6 : imginn.com (mirror IG) ──
     if (!userData) {
       try {
-        const r = await axios.get(`https://imginn.com/${clean}/`, {
+        const r = await axget(`https://imginn.com/${clean}/`, {
           timeout: 10000,
           headers: { "User-Agent": randUA() },
           validateStatus: () => true,
@@ -224,7 +232,7 @@ export const IgProfileModule = {
     // ── Endpoint 7 : storiesig.com (stories preview + profile) ──
     if (!userData) {
       try {
-        const r = await axios.get(`https://storiesig.app/api/ig/userInfoByUsername/${clean}`, {
+        const r = await axget(`https://storiesig.app/api/ig/userInfoByUsername/${clean}`, {
           timeout: 8000,
           headers: { "User-Agent": randUA(), "Accept": "application/json" },
           validateStatus: () => true,
@@ -232,6 +240,68 @@ export const IgProfileModule = {
         const d = (r.data as any)?.user || r.data as any;
         if (d?.pk || d?.username) {
           userData = { id: d.pk, username: d.username || clean, full_name: d.full_name, biography: d.biography, profile_pic_url: d.profile_pic_url_hd || d.profile_pic_url, edge_followed_by: { count: d.follower_count }, edge_follow: { count: d.following_count }, edge_owner_to_timeline_media: { count: d.media_count }, is_verified: d.is_verified, is_private: d.is_private, is_business_account: d.is_business, business_category_name: d.category, external_url: d.external_url, business_email: d.public_email, business_phone_number: d.public_phone_number };
+        }
+      } catch {}
+    }
+
+    // ── Endpoint 8 : iganony.com (mirror IG) ──
+    if (!userData) {
+      try {
+        const r = await axget(`https://iganony.com/${clean}`, {
+          timeout: 8000,
+          headers: { "User-Agent": randUA() },
+          validateStatus: () => true,
+        } as any);
+        const html = r.data as string;
+        const displayName = html.match(/class="[^"]*username[^"]*"[^>]*>\s*([^<]{2,50})/i)?.[1]?.trim()
+          || html.match(/<title>([^<|]+)/i)?.[1]?.replace(/@[^)]+\)/, "").trim();
+        const followers = html.match(/([\d,.KM]+)\s*[Ff]ollowers/)?.[1];
+        const bio = html.match(/class="[^"]*bio[^"]*"[^>]*>\s*([^<]{5,300})/i)?.[1]?.trim();
+        if (displayName && !displayName.toLowerCase().includes("iganony")) {
+          userData = { id: null, username: clean, full_name: displayName, biography: bio, edge_followed_by: { count: followers }, _source: "iganony" };
+        }
+      } catch {}
+    }
+
+    // ── Endpoint 9 : instanavigation.com (public profile API) ──
+    if (!userData) {
+      try {
+        const r = await axget(`https://instanavigation.com/api/user/${clean}`, {
+          timeout: 8000,
+          headers: { "User-Agent": randUA(), "Accept": "application/json", "Referer": "https://instanavigation.com/" },
+          validateStatus: () => true,
+        } as any);
+        const d = r.data as any;
+        if (d?.username || d?.full_name) {
+          userData = {
+            id: d.pk || d.id, username: d.username || clean,
+            full_name: d.full_name, biography: d.biography,
+            profile_pic_url: d.profile_pic_url_hd || d.profile_pic_url,
+            edge_followed_by: { count: d.follower_count }, edge_follow: { count: d.following_count },
+            edge_owner_to_timeline_media: { count: d.media_count },
+            is_verified: d.is_verified, is_private: d.is_private,
+            external_url: d.external_url,
+            business_email: d.public_email, business_phone_number: d.public_phone_number,
+            _source: "instanavigation",
+          };
+        }
+      } catch {}
+    }
+
+    // ── Endpoint 10 : gramhir.com (scraping public, dernière chance) ──
+    if (!userData) {
+      try {
+        const r = await axget(`https://gramhir.com/profile/${clean}/`, {
+          timeout: 8000,
+          headers: { "User-Agent": randUA() },
+          validateStatus: () => true,
+        } as any);
+        const html = r.data as string;
+        const fullName = html.match(/class="profile-name"[^>]*>([^<]{2,80})/i)?.[1]?.trim();
+        const bio = html.match(/class="profile-bio"[^>]*>([\s\S]{0,300}?)<\//i)?.[1]?.replace(/<[^>]+>/g, "").trim();
+        const followers = html.match(/([\d,.KM]+)\s*<span[^>]*>[Ff]ollowers/)?.[1];
+        if (fullName) {
+          userData = { id: null, username: clean, full_name: fullName, biography: bio, edge_followed_by: { count: followers }, _source: "gramhir" };
         }
       } catch {}
     }
@@ -244,6 +314,7 @@ export const IgProfileModule = {
       const following = userData.edge_follow?.count ?? userData.following_count;
       const posts = userData.edge_owner_to_timeline_media?.count ?? userData.media_count;
 
+      const avatarUrl = userData.profile_pic_url_hd || userData.profile_pic_url || "";
       entities.push(ent("social_profile", `https://www.instagram.com/${clean}/`, "ig_profile", 95, {
         platform: "Instagram", username: clean, userId: userData.id,
         displayName: fullName, bio, followers, following, posts,
@@ -251,9 +322,15 @@ export const IgProfileModule = {
         businessAccount: userData.is_business_account,
         businessCategory: userData.business_category_name,
         externalUrl: userData.external_url,
-        avatar: userData.profile_pic_url_hd || userData.profile_pic_url,
+        avatar: avatarUrl,
         dataSource: userData._source || "instagram_api",
       }));
+      // Émettre l'avatar comme image_url → déclenche reverse_image_search automatiquement
+      if (avatarUrl && !avatarUrl.includes("44884218_345707102882519")) { // exclure avatar par défaut IG
+        entities.push(ent("image_url", avatarUrl, "ig_profile", 88, {
+          username: clean, platform: "Instagram", type: "profile_picture",
+        }));
+      }
 
       if (fullName && fullName !== clean) {
         entities.push(ent("person", fullName, "ig_profile", 90, { username: clean, platform: "Instagram" }));
@@ -290,6 +367,155 @@ export const IgProfileModule = {
 };
 
 // ============================================================================
+// MODULE 1b — PHONE → INSTAGRAM ACCOUNT (users/lookup API)
+// ============================================================================
+export const IgPhoneLookupModule = {
+  id: "ig_phone_lookup",
+  name: "Instagram Phone → Account Lookup",
+  category: "phone",
+  targetTypes: ["phone"],
+  priority: 1,
+  isAvailable: async () => true,
+  execute: async (target: string, emit: any) => {
+    emit({ type: "log", data: { message: `[IG] Phone lookup: ${target} → username Instagram...` } });
+    const entities: any[] = [];
+
+    // Normaliser le numéro : +33769723999 ou 0769723999 → +33769723999
+    const clean = target.replace(/\s/g, "");
+    let e164 = clean;
+    if (clean.startsWith("0") && !clean.startsWith("00")) {
+      e164 = "+33" + clean.slice(1);
+    } else if (clean.startsWith("00")) {
+      e164 = "+" + clean.slice(2);
+    }
+
+    // Signature HMAC-SHA256 (clé publique de l'app Instagram Android)
+    const SIG_KEY = "e6358aeede676184b9fe702b30f4fd35e71744605e39d2181a34cede076b3c33";
+    const SIG_VER = "4";
+
+    const crypto = await import("crypto");
+    function genSig(data: string): string {
+      const sig = crypto.createHmac("sha256", SIG_KEY).update(data).digest("hex");
+      return `ig_sig_key_version=${SIG_VER}&signed_body=${sig}.${encodeURIComponent(data)}`;
+    }
+
+    const payload = JSON.stringify({
+      login_attempt_count: "0",
+      directly_sign_in: "true",
+      source: "default",
+      q: e164,
+      ig_sig_key_version: SIG_VER,
+    });
+
+    const IG_MOBILE_UAS = [
+      "Instagram 101.0.0.15.120 Android (28/9; 360dpi; 720x1480; samsung; SM-G960F; starlte; samsungexynos9810; en_US; 161773481)",
+      "Instagram 219.0.0.12.117 Android (30/11; 420dpi; 1080x2400; Xiaomi; M2101K6G; rosemary; mt6781; en_US; 340282366841710300)",
+      "Instagram 275.0.0.27.98 Android (31/12; 420dpi; 1080x2200; Google; Pixel 6; oriole; exynos9825; en_US; 458229258)",
+    ];
+
+    let found = false;
+    for (const ua of IG_MOBILE_UAS) {
+      try {
+        const r = await (axios as any).post(
+          "https://i.instagram.com/api/v1/users/lookup/",
+          genSig(payload),
+          {
+            timeout: 12000,
+            httpsAgent: NO_SSL_AGENT,
+            validateStatus: () => true,
+            headers: {
+              "User-Agent": ua,
+              "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+              "Accept-Language": "en-US",
+              "Accept-Encoding": "gzip, deflate",
+              "X-FB-HTTP-Engine": "Liger",
+              "Connection": "close",
+            },
+          } as any
+        );
+
+        const d = r.data as any;
+        emit({ type: "log", data: { message: `[IG Lookup] HTTP ${r.status} — ${JSON.stringify(d).slice(0, 120)}` } });
+
+        if (r.status === 429 || (r.status >= 400 && !d?.user && !d?.multiple_users_list)) {
+          await sleep(1500);
+          continue;
+        }
+
+        // Cas 1 : un seul compte lié
+        if (d?.user) {
+          const u = d.user;
+          const username = u.username;
+          const fullName = u.full_name || u.name || "";
+          const maskedEmail = u.obfuscated_email || u.email || "";
+          const maskedPhone = u.obfuscated_phone || u.phone_number || "";
+          const picUrl = u.profile_pic_url_hd || u.profile_pic_url || "";
+
+          emit({ type: "log", data: { message: `[IG Lookup] ✅ Compte trouvé: @${username} (${fullName})` } });
+
+          if (username) {
+            entities.push(ent("username", username, "ig_phone_lookup", 95, {
+              platform: "Instagram", phone: target, derivedFrom: "phone_lookup",
+              fullName, maskedEmail, maskedPhone,
+            }));
+            entities.push(ent("social_profile", `https://www.instagram.com/${username}/`, "ig_phone_lookup", 95, {
+              platform: "Instagram", username, phone: target,
+              fullName, avatar: picUrl,
+            }));
+          }
+          if (fullName) entities.push(ent("person", fullName, "ig_phone_lookup", 88, { username, phone: target }));
+          if (maskedEmail) entities.push(ent("email", maskedEmail, "ig_phone_lookup", 75, { username, masked: true, phone: target }));
+          if (maskedPhone) entities.push(ent("phone", maskedPhone, "ig_phone_lookup", 75, { username, masked: true }));
+          // Photo de profil → déclenche reverse_image_search automatiquement
+          if (picUrl && !picUrl.includes("44884218_345707102882519")) {
+            entities.push(ent("image_url", picUrl, "ig_phone_lookup", 88, {
+              username, platform: "Instagram", type: "profile_picture", phone: target,
+            }));
+          }
+          found = true;
+          break;
+        }
+
+        // Cas 2 : plusieurs comptes liés au même numéro
+        if (d?.multiple_users_list?.length) {
+          emit({ type: "log", data: { message: `[IG Lookup] ✅ ${d.multiple_users_list.length} comptes liés à ce numéro` } });
+          for (const u of d.multiple_users_list) {
+            const username = u.username;
+            if (!username) continue;
+            entities.push(ent("username", username, "ig_phone_lookup", 93, {
+              platform: "Instagram", phone: target,
+              maskedEmail: u.obfuscated_email, maskedPhone: u.obfuscated_phone,
+            }));
+            entities.push(ent("social_profile", `https://www.instagram.com/${username}/`, "ig_phone_lookup", 93, {
+              platform: "Instagram", username, phone: target,
+            }));
+          }
+          found = true;
+          break;
+        }
+
+        // Cas 3 : "No users found" = numéro non enregistré
+        if (d?.message === "No users found") {
+          emit({ type: "log", data: { message: `[IG Lookup] ❌ Aucun compte Instagram lié à ce numéro` } });
+          found = true;
+          break;
+        }
+
+      } catch (e: any) {
+        emit({ type: "log", data: { message: `[IG Lookup] Erreur: ${e.message}` } });
+      }
+      await sleep(1000);
+    }
+
+    if (!found) {
+      emit({ type: "log", data: { message: `[IG Lookup] Rate limit — réessayer dans quelques minutes` } });
+    }
+
+    return { success: entities.length > 0, data: { phone: target, found: entities.length > 0 }, entities };
+  },
+};
+
+// ============================================================================
 // MODULE 2 — CONTACT INFO (password reset trick)
 // ============================================================================
 export const IgContactModule = {
@@ -307,7 +533,7 @@ export const IgContactModule = {
     // Step 1: récupérer l'userId
     let userId: string | null = null;
     try {
-      const r = await axios.get(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
+      const r = await axget(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
         timeout: 8000,
         headers: { "User-Agent": randUA(), "X-IG-App-ID": randAppId(), "Accept": "application/json" },
         validateStatus: () => true,
@@ -385,7 +611,7 @@ export const IgNetworkModule = {
     let csrfToken: string | null = null;
 
     try {
-      const profileR = await axios.get(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
+      const profileR = await axget(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
         timeout: 10000,
         headers: { "User-Agent": randUA(), "X-IG-App-ID": randAppId() },
         validateStatus: () => true,
@@ -404,7 +630,7 @@ export const IgNetworkModule = {
     // Followers (max 50 pour rester discret)
     let followersData: any[] = [];
     try {
-      const r = await axios.get(
+      const r = await axget(
         `https://www.instagram.com/api/v1/friendships/${userId}/followers/?count=50`,
         {
           timeout: 12000,
@@ -424,7 +650,7 @@ export const IgNetworkModule = {
     let followingData: any[] = [];
     try {
       await sleep(1200);
-      const r = await axios.get(
+      const r = await axget(
         `https://www.instagram.com/api/v1/friendships/${userId}/following/?count=50`,
         {
           timeout: 12000,
@@ -493,7 +719,7 @@ export const IgGeoModule = {
 
     // Récupère les posts via l'API v1
     try {
-      const profileR = await axios.get(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
+      const profileR = await axget(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
         timeout: 10000,
         headers: { "User-Agent": randUA(), "X-IG-App-ID": randAppId() },
         validateStatus: () => true,
@@ -507,7 +733,7 @@ export const IgGeoModule = {
     // Fallback : picuki (affiche les posts publics)
     if (posts.length === 0) {
       try {
-        const r = await axios.get(`https://www.picuki.com/profile/${clean}`, {
+        const r = await axget(`https://www.picuki.com/profile/${clean}`, {
           timeout: 10000, headers: { "User-Agent": randUA() }, validateStatus: () => true,
         } as any);
         const html = r.data as string;
@@ -607,7 +833,7 @@ export const IgStoriesModule = {
 
     // Méthode 1 : storiesig.app (viewer public de stories)
     try {
-      const r = await axios.get(`https://storiesig.app/api/ig/stories/${clean}`, {
+      const r = await axget(`https://storiesig.app/api/ig/stories/${clean}`, {
         timeout: 10000, headers: { "User-Agent": randUA(), "Accept": "application/json" }, validateStatus: () => true,
       } as any);
       const stories = (r.data as any)?.data || [];
@@ -634,7 +860,7 @@ export const IgStoriesModule = {
 
     // Méthode 2 : highlights via API storiesig
     try {
-      const r = await axios.get(`https://storiesig.app/api/ig/highlights/${clean}`, {
+      const r = await axget(`https://storiesig.app/api/ig/highlights/${clean}`, {
         timeout: 10000, headers: { "User-Agent": randUA(), "Accept": "application/json" }, validateStatus: () => true,
       } as any);
       const highlights = (r.data as any)?.data || [];
@@ -650,7 +876,7 @@ export const IgStoriesModule = {
 
     // Méthode 3 : insta-stories.to (viewer alternatif)
     try {
-      const r = await axios.get(`https://insta-stories.to/user/${clean}`, {
+      const r = await axget(`https://insta-stories.to/user/${clean}`, {
         timeout: 8000, headers: { "User-Agent": randUA() }, validateStatus: () => true,
       } as any);
       const html = r.data as string;
@@ -684,7 +910,7 @@ export const IgHashtagModule = {
     // D'abord, récupérer les hashtags utilisés par le profil
     let hashtags: string[] = [];
     try {
-      const r = await axios.get(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
+      const r = await axget(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
         timeout: 10000, headers: { "User-Agent": randUA(), "X-IG-App-ID": randAppId() }, validateStatus: () => true,
       } as any);
       const u = (r.data as any)?.data?.user;
@@ -709,7 +935,7 @@ export const IgHashtagModule = {
       const tagClean = tag.replace(/^#/, "");
       try {
         await sleep(800);
-        const r = await axios.get(
+        const r = await axget(
           `https://www.instagram.com/api/v1/tags/${encodeURIComponent(tagClean)}/sections/?count=12&tab=top`,
           {
             timeout: 10000,
@@ -753,7 +979,7 @@ export const IgTaggedModule = {
 
     // Posts où le compte est tagué
     try {
-      const r = await axios.get(
+      const r = await axget(
         `https://www.instagram.com/api/v1/usertags/${clean}/feed/?count=20`,
         {
           timeout: 10000,
@@ -790,7 +1016,7 @@ export const IgTaggedModule = {
 
     // Mentions dans les commentaires (via picuki)
     try {
-      const r = await axios.get(`https://www.picuki.com/profile/${clean}`, {
+      const r = await axget(`https://www.picuki.com/profile/${clean}`, {
         timeout: 10000, headers: { "User-Agent": randUA() }, validateStatus: () => true,
       } as any);
       const html = r.data as string;
@@ -819,45 +1045,69 @@ export const IgCrossPlatformModule = {
     emit({ type: "log", data: { message: `[IG] Cross-platform pour @${clean} (20 plateformes)...` } });
     const entities: any[] = [];
 
-    // Plateformes à vérifier (URL + pattern de détection 404/200)
-    const platforms: Array<{ name: string; url: string; notFoundPatterns: string[] }> = [
-      { name: "Twitter/X", url: `https://twitter.com/${clean}`, notFoundPatterns: ["this account doesn't exist", "user not found"] },
-      { name: "TikTok", url: `https://www.tiktok.com/@${clean}`, notFoundPatterns: ["couldn't find this account", "Page not found"] },
-      { name: "YouTube", url: `https://www.youtube.com/@${clean}`, notFoundPatterns: ["404", "This page isn't available"] },
-      { name: "Reddit", url: `https://www.reddit.com/user/${clean}/about.json`, notFoundPatterns: ["NOT_FOUND", "User Not Found"] },
-      { name: "GitHub", url: `https://github.com/${clean}`, notFoundPatterns: ["Not Found", "404"] },
-      { name: "LinkedIn", url: `https://www.linkedin.com/in/${clean}`, notFoundPatterns: ["Page not found", "profile doesn't exist"] },
-      { name: "Pinterest", url: `https://www.pinterest.fr/${clean}/`, notFoundPatterns: ["Sorry!", "404"] },
-      { name: "Tumblr", url: `https://${clean}.tumblr.com/`, notFoundPatterns: ["There's nothing here", "Not Found"] },
-      { name: "Snapchat", url: `https://www.snapchat.com/add/${clean}`, notFoundPatterns: ["Sorry, this page", "doesn't exist"] },
-      { name: "Twitch", url: `https://www.twitch.tv/${clean}`, notFoundPatterns: ["Sorry. Unless", "404"] },
-      { name: "SoundCloud", url: `https://soundcloud.com/${clean}`, notFoundPatterns: ["404", "Not found"] },
-      { name: "Spotify", url: `https://open.spotify.com/user/${clean}`, notFoundPatterns: ["404", "Not found"] },
-      { name: "Medium", url: `https://medium.com/@${clean}`, notFoundPatterns: ["404", "Page not found"] },
-      { name: "DeviantArt", url: `https://www.deviantart.com/${clean}`, notFoundPatterns: ["Page Not Found", "404"] },
-      { name: "Flickr", url: `https://www.flickr.com/people/${clean}`, notFoundPatterns: ["Nobody here", "Page not found"] },
-      { name: "Steam", url: `https://steamcommunity.com/id/${clean}`, notFoundPatterns: ["The specified profile could not be found"] },
-      { name: "Vimeo", url: `https://vimeo.com/${clean}`, notFoundPatterns: ["Sorry, we couldn't find", "404"] },
-      { name: "Telegram", url: `https://t.me/${clean}`, notFoundPatterns: ["tgme_page_not_found", "If you have Telegram"] },
-      { name: "Facebook", url: `https://www.facebook.com/${clean}`, notFoundPatterns: ["Page Not Found", "This page isn't available"] },
-      { name: "Patreon", url: `https://www.patreon.com/${clean}`, notFoundPatterns: ["404", "Page Not Found"] },
+    // Plateformes : notFoundPatterns = faux, confirmPatterns = vrai (au moins un doit matcher)
+    // confirmPatterns vide = on se fie uniquement au status HTTP + notFound
+    const platforms: Array<{ name: string; url: string; notFoundPatterns: string[]; confirmPatterns: string[] }> = [
+      { name: "Twitter/X",   url: `https://twitter.com/${clean}`,                  notFoundPatterns: ["this account doesn't exist", "sorry, that page doesn't exist"], confirmPatterns: [`@${clean}`, `"screen_name":"${clean}"`] },
+      { name: "TikTok",      url: `https://www.tiktok.com/@${clean}`,              notFoundPatterns: ["couldn't find this account", "Page not found"], confirmPatterns: [`@${clean}`, `"uniqueId":"${clean}"`] },
+      { name: "YouTube",     url: `https://www.youtube.com/@${clean}`,             notFoundPatterns: ["404", "This page isn't available"], confirmPatterns: [`@${clean}`, "channelId", "subscriberCountText"] },
+      { name: "Reddit",      url: `https://www.reddit.com/user/${clean}/about.json`, notFoundPatterns: ["NOT_FOUND", "User Not Found", "\"error\": 404"], confirmPatterns: [`"name":"${clean}"`, `"name": "${clean}"`] },
+      { name: "GitHub",      url: `https://github.com/${clean}`,                   notFoundPatterns: ["Not Found", "This is not the web page"], confirmPatterns: [`/${clean}`, "contribution", "repositories"] },
+      { name: "LinkedIn",    url: `https://www.linkedin.com/in/${clean}`,          notFoundPatterns: ["Page not found", "profile doesn't exist", "This LinkedIn Page isn't available"], confirmPatterns: ["profileSection", "pv-top-card"] },
+      { name: "Pinterest",   url: `https://www.pinterest.fr/${clean}/`,            notFoundPatterns: ["Sorry!", "couldn't find", "Page not found"], confirmPatterns: [`"username":"${clean}"`, `pinterest.com/${clean}/pins`] },
+      { name: "Tumblr",      url: `https://${clean}.tumblr.com/`,                  notFoundPatterns: ["There's nothing here", "Not Found", "tumblr.com/register"], confirmPatterns: ["tumblr-blog", "post", "reblog"] },
+      { name: "Snapchat",    url: `https://www.snapchat.com/add/${clean}`,         notFoundPatterns: ["Sorry, this page", "doesn't exist"], confirmPatterns: [`@${clean}`, "snapcode", "AddFriends"] },
+      { name: "Twitch",      url: `https://www.twitch.tv/${clean}`,                notFoundPatterns: ["Sorry. Unless", "404 Not Found"], confirmPatterns: ["channel", "stream", `"login":"${clean}"`] },
+      { name: "SoundCloud",  url: `https://soundcloud.com/${clean}`,               notFoundPatterns: ["404", "Not found", "Sorry! We can"], confirmPatterns: [`soundcloud.com/${clean}`, "waveform", "sc-artwork"] },
+      { name: "Medium",      url: `https://medium.com/@${clean}`,                  notFoundPatterns: ["404", "Page not found", "doesn't exist"], confirmPatterns: [`@${clean}`, "postPreview", "medium-feed"] },
+      { name: "DeviantArt",  url: `https://www.deviantart.com/${clean}`,           notFoundPatterns: ["Page Not Found", "404"], confirmPatterns: ["userpage", "deviations", `deviantart.com/${clean}`] },
+      { name: "Flickr",      url: `https://www.flickr.com/people/${clean}`,        notFoundPatterns: ["Nobody here", "Page not found"], confirmPatterns: ["photostream", "faves", "flickr-person"] },
+      { name: "Steam",       url: `https://steamcommunity.com/id/${clean}`,        notFoundPatterns: ["The specified profile could not be found"], confirmPatterns: ["profile_header", "persona_name", "miniprofile"] },
+      { name: "Vimeo",       url: `https://vimeo.com/${clean}`,                    notFoundPatterns: ["Sorry, we couldn't find", "404"], confirmPatterns: [`vimeo.com/${clean}`, "videoContainer", "clips_count"] },
+      { name: "Telegram",    url: `https://t.me/${clean}`,                         notFoundPatterns: ["tgme_page_not_found", "If you have Telegram, you can contact"], confirmPatterns: ["tgme_page_title", "tgme_page_description"] },
+      { name: "Facebook",    url: `https://www.facebook.com/${clean}`,             notFoundPatterns: ["Page Not Found", "This page isn't available", "content-unavailable"], confirmPatterns: ["timeline", `facebook.com/${clean}`, "profileBio"] },
+      { name: "Patreon",     url: `https://www.patreon.com/${clean}`,              notFoundPatterns: ["404", "Page Not Found", "Oops"], confirmPatterns: ["patreon-nav", "creator-name", `patreon.com/${clean}`] },
+      { name: "Keybase",     url: `https://keybase.io/${clean}`,                   notFoundPatterns: ["404", "User not found"], confirmPatterns: [`keybase.io/${clean}`, "pgp", "public_key"] },
     ];
 
     // Exécuter en parallèle par batch de 5
+    // Phase 1 : HEAD request rapide pour vérifier existence (status 200/403/404)
     const batchSize = 5;
     for (let i = 0; i < platforms.length; i += batchSize) {
       const batch = platforms.slice(i, i + batchSize);
       const results = await Promise.allSettled(
         batch.map(async (p) => {
-          const r = await axios.get(p.url, {
-            timeout: 8000,
-            headers: { "User-Agent": randUA(), "Accept-Language": "en-US" },
-            validateStatus: () => true,
-            maxRedirects: 3,
-          } as any);
-          const body = typeof r.data === "string" ? r.data : JSON.stringify(r.data);
-          const notFound = p.notFoundPatterns.some(pat => body.toLowerCase().includes(pat.toLowerCase()));
-          return { platform: p, status: r.status, found: r.status < 400 && !notFound, body };
+          // GET direct (besoin du body pour vérifier les confirmPatterns)
+          let status = 0;
+          let body = "";
+          try {
+            const getResp = await axget(p.url, {
+              timeout: 8000,
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept": "text/html,application/json,*/*",
+              },
+              maxRedirects: 4,
+            } as any);
+            status = getResp.status;
+            const raw = getResp.data;
+            body = typeof raw === "string" ? raw.slice(0, 8000) : JSON.stringify(raw).slice(0, 8000);
+          } catch {}
+
+          // Statut 429 = rate-limit = probablement existant
+          const bodyLow = body.toLowerCase();
+          const isNotFound = status === 404 || status === 410 ||
+            (p as any).notFoundPatterns.some((pat: string) => bodyLow.includes(pat.toLowerCase()));
+
+          // Si des confirmPatterns sont définis, au moins un doit matcher pour éviter les faux positifs SPA
+          const confirmPatterns: string[] = (p as any).confirmPatterns || [];
+          const isConfirmed = confirmPatterns.length === 0
+            ? (!isNotFound && status > 0 && status < 500)
+            : confirmPatterns.some(pat => bodyLow.includes(pat.toLowerCase()));
+
+          const found = !isNotFound && isConfirmed;
+          return { platform: p, status, found, body };
         })
       );
 
@@ -865,18 +1115,22 @@ export const IgCrossPlatformModule = {
         const result = results[j];
         const platform = batch[j];
         if (result.status === "fulfilled" && result.value.found) {
-          const { body } = result.value;
-          const displayName = body.match(/<meta property="og:title" content="([^"]+)"/i)?.[1]?.replace(/ \(@[^)]+\)/, "").trim()
-            || body.match(/<title>([^|<-]+)/i)?.[1]?.trim();
+          const { body, status } = result.value;
+          const displayName = body
+            ? (body.match(/<meta property="og:title" content="([^"]+)"/i)?.[1]?.replace(/ \(@[^)]+\)/, "").trim()
+              || body.match(/<title>([^|<\-]+)/i)?.[1]?.trim())
+            : undefined;
+          const confidence = status === 200 ? 85 : status === 403 ? 72 : 65;
 
-          entities.push(ent("social_profile", platform.url, "ig_cross_platform", 80, {
+          entities.push(ent("social_profile", platform.url, "ig_cross_platform", confidence, {
             platform: platform.name, username: clean, found: true,
+            httpStatus: status,
             displayName: displayName && !displayName.includes(platform.name) ? displayName : undefined,
           }));
-          emit({ type: "log", data: { message: `[IG Cross] ✓ ${platform.name}: @${clean} trouvé` } });
+          emit({ type: "log", data: { message: `[IG Cross] ✓ ${platform.name}: @${clean} (HTTP ${status})` } });
         }
       }
-      await sleep(300);
+      await sleep(200);
     }
 
     return { success: entities.length > 0, data: { username: clean, platformsFound: entities.length }, entities };
@@ -903,7 +1157,7 @@ export const IgAltAccountsModule = {
     let fullName: string | null = null;
 
     try {
-      const r = await axios.get(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
+      const r = await axget(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${clean}`, {
         timeout: 10000, headers: { "User-Agent": randUA(), "X-IG-App-ID": randAppId() }, validateStatus: () => true,
       } as any);
       const u = (r.data as any)?.data?.user;
@@ -931,7 +1185,7 @@ export const IgAltAccountsModule = {
 
     for (const variant of variants.slice(0, 8)) {
       try {
-        const r = await axios.get(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${variant}`, {
+        const r = await axget(`https://www.instagram.com/api/v1/users/web_profile_info/?username=${variant}`, {
           timeout: 6000, headers: { "User-Agent": randUA(), "X-IG-App-ID": randAppId() }, validateStatus: () => true,
         } as any);
         const u = (r.data as any)?.data?.user;
@@ -952,7 +1206,7 @@ export const IgAltAccountsModule = {
     // Stratégie 2 : recherche Google par nom complet → Instagram
     if (fullName) {
       try {
-        const r = await axios.get(
+        const r = await axget(
           `https://www.google.com/search?q=${encodeURIComponent(`"${fullName}" site:instagram.com -${clean}`)}`,
           {
             timeout: 10000,
@@ -977,7 +1231,7 @@ export const IgAltAccountsModule = {
     // Stratégie 3 : reverse image search sur photo de profil
     if (profilePicUrl) {
       try {
-        const bingR = await axios.get(
+        const bingR = await axget(
           `https://www.bing.com/images/search?q=imgurl:${encodeURIComponent(profilePicUrl)}&view=detailv2&iss=sbi`,
           {
             timeout: 10000,
@@ -1131,7 +1385,7 @@ export const IgHikerApiModule = {
 
     for (const api of hikerHosts) {
       try {
-        const r = await axios.get(`https://${api.host}${api.path}`, {
+        const r = await axget(`https://${api.host}${api.path}`, {
           timeout: 12000,
           headers: { "x-rapidapi-key": key, "x-rapidapi-host": api.host },
           validateStatus: () => true,
@@ -1173,14 +1427,104 @@ export const IgHikerApiModule = {
 };
 
 // ============================================================================
+// MODULE 12B — POSTS & REELS (contenus récents via proxies publics)
+// ============================================================================
+export const IgPostsReelsModule = {
+  id: "ig_posts_reels",
+  name: "Instagram Posts & Reels (contenu récent)",
+  category: "social",
+  targetTypes: ["username"],
+  priority: 3,
+  isAvailable: async () => true,
+  execute: async (target: string, emit: any) => {
+    const clean = target.replace(/^@/, "").toLowerCase().trim();
+    emit({ type: "log", data: { message: `[IG Posts] Récupération posts/reels pour @${clean}...` } });
+    const entities: any[] = [];
+
+    // ── Méthode 1 : picnob.com (miroir public IG)
+    try {
+      const r = await axget(`https://www.picnob.com/profile/${clean}/`, {
+        timeout: 12000, headers: { "User-Agent": randUA(), "Accept": "text/html" }, validateStatus: () => true,
+      } as any);
+      const html = r.data as string;
+      const captions = [...html.matchAll(/class="photo-desc"[^>]*>([\s\S]{1,500}?)<\/div>/g)].map(m =>
+        m[1].replace(/<[^>]+>/g, " ").trim()
+      );
+      const imgUrls = [...html.matchAll(/src="(https:\/\/[^"]+\.(?:jpg|jpeg|webp))(?:\?[^"]+)?" loading/g)].map(m => m[1]);
+      const locations = [...html.matchAll(/class="photo-location"[^>]*>([^<]{3,80})</g)].map(m => m[1].trim());
+
+      for (const cap of captions.slice(0, 10)) {
+        entities.push(...extractPatterns(cap, "ig_posts_reels", { username: clean, type: "caption" }));
+        // Hashtags dans la caption
+        const tags = [...new Set((cap.match(/#[\wÀ-ÿ]+/g) || []) as string[])];
+        if (tags.length > 0) entities.push(ent("metadata", `Hashtags posts: ${tags.slice(0,10).join(" ")}`, "ig_posts_reels", 75, { username: clean, hashtags: tags }));
+      }
+      for (const loc of [...new Set(locations)].slice(0, 8))
+        entities.push(ent("location", loc, "ig_posts_reels", 82, { username: clean, source: "picnob" }));
+      if (captions.length > 0 || locations.length > 0)
+        emit({ type: "log", data: { message: `[IG Posts] picnob: ${captions.length} captions, ${locations.length} lieux` } });
+    } catch {}
+
+    // ── Méthode 2 : dumpor.com (scrape posts IG)
+    try {
+      await sleep(500);
+      const r = await axget(`https://dumpor.com/v/${clean}`, {
+        timeout: 12000, headers: { "User-Agent": randUA() }, validateStatus: () => true,
+      } as any);
+      const html = r.data as string;
+      const captions2 = [...html.matchAll(/class="post-caption"[^>]*>([\s\S]{1,300}?)<\/p>/g)].map(m =>
+        m[1].replace(/<[^>]+>/g, " ").trim()
+      );
+      const locs2 = [...html.matchAll(/class="post-location-name"[^>]*>([^<]{3,60})</g)].map(m => m[1].trim());
+      for (const cap of captions2.slice(0, 8)) {
+        entities.push(...extractPatterns(cap, "ig_posts_reels_dumpor", { username: clean }));
+      }
+      for (const loc of [...new Set(locs2)].slice(0, 5))
+        entities.push(ent("location", loc, "ig_posts_reels_dumpor", 80, { username: clean, source: "dumpor" }));
+    } catch {}
+
+    // ── Méthode 3 : izuum.com (viewer reels)
+    try {
+      await sleep(400);
+      const r = await axget(`https://izuum.com/profile/${clean}`, {
+        timeout: 10000, headers: { "User-Agent": randUA() }, validateStatus: () => true,
+      } as any);
+      const html = r.data as string;
+      const bios2 = html.match(/class="profile-bio"[^>]*>([\s\S]{0,500}?)<\/div>/)?.[1]?.replace(/<[^>]+>/g, " ").trim();
+      if (bios2) entities.push(...extractPatterns(bios2, "ig_posts_reels_izuum", { username: clean, type: "bio" }));
+    } catch {}
+
+    // ── Méthode 4 : Instagram oEmbed (URL vers JSON public, sans auth)
+    try {
+      const oembedUrl = `https://api.instagram.com/oembed/?url=https://www.instagram.com/${clean}/&omitscript=true`;
+      const r = await axget(oembedUrl, {
+        timeout: 8000, headers: { "User-Agent": randUA() }, validateStatus: () => true,
+      } as any);
+      const d = r.data as any;
+      if (d?.title || d?.author_name) {
+        entities.push(ent("person", d.author_name || clean, "ig_oembed", 85, {
+          username: d.author_url?.split("/").filter(Boolean).pop() || clean,
+          platform: "Instagram", thumbnail: d.thumbnail_url, source: "oembed",
+        }));
+      }
+    } catch {}
+
+    emit({ type: "log", data: { message: `[IG Posts] Terminé: ${entities.length} entités extraites` } });
+    return { success: entities.length > 0, data: { username: clean, entitiesFound: entities.length }, entities };
+  },
+};
+
+// ============================================================================
 // MOTEUR INSTAGRAM — Orchestrateur principal
 // ============================================================================
 export class InstagramEngine {
   private readonly modules = [
+    IgPhoneLookupModule,
     IgProfileModule,
     IgContactModule,
     IgHikerApiModule,
     IgInstalaoderModule,
+    IgPostsReelsModule,
     IgNetworkModule,
     IgGeoModule,
     IgStoriesModule,
@@ -1204,7 +1548,7 @@ export class InstagramEngine {
 
     // Modules rapides d'abord (profil, HikerAPI, contact)
     const priorityOrder = ["ig_profile", "ig_hikerapi", "ig_contact", "ig_instaloader",
-      "ig_network", "ig_geofence", "ig_stories", "ig_hashtag",
+      "ig_posts_reels", "ig_network", "ig_geofence", "ig_stories", "ig_hashtag",
       "ig_tagged", "ig_cross_platform", "ig_alt_accounts", "ig_osintgram"];
 
     const orderedModules = this.modules
