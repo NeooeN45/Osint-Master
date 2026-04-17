@@ -6,6 +6,9 @@
 import axios from "axios";
 import { exec } from "child_process";
 import { promisify } from "util";
+import fs from "fs";
+import path from "path";
+import https from "https";
 
 const execAsync = promisify(exec);
 
@@ -246,6 +249,63 @@ export const usernameModulesExtra = [
         }
       }
       return { success: true, data: { found: entities.length }, entities };
+    },
+  },
+
+  // ---- WhatsMyName (731 sites, JSON local, 0 faux positifs) ----
+  {
+    id: "whatsmyname_wmn",
+    name: "WhatsMyName Full (731 sites)",
+    category: "username",
+    targetTypes: ["username"],
+    priority: 2,
+    isAvailable: async () => {
+      const p = path.resolve(process.cwd(), "src/data/wmn-data.json");
+      return fs.existsSync(p);
+    },
+    execute: async (target: string, emit: any) => {
+      emit({ type: "log", data: { message: `WhatsMyName: checking ${target} on 731 sites...` } });
+      const entities: any[] = [];
+      const clean = target.replace(/^@/, "");
+
+      const dataPath = path.resolve(process.cwd(), "src/data/wmn-data.json");
+      const wmnData = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
+      const sites: any[] = wmnData.sites || [];
+
+      const NO_SSL = new https.Agent({ rejectUnauthorized: false });
+      const CONCURRENCY = 20;
+      let checked = 0;
+
+      // Traiter par batch de CONCURRENCY
+      for (let i = 0; i < sites.length; i += CONCURRENCY) {
+        const batch = sites.slice(i, i + CONCURRENCY);
+        await Promise.all(batch.map(async (site: any) => {
+          const url = site.uri_check?.replace("{account}", encodeURIComponent(clean));
+          if (!url) return;
+          try {
+            const r = await axios.get(url, {
+              timeout: 8000,
+              httpsAgent: NO_SSL,
+              validateStatus: () => true,
+              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124" },
+              maxRedirects: 3,
+            } as any);
+            checked++;
+            const body = typeof r.data === "string" ? r.data : JSON.stringify(r.data || "");
+            const statusOk = r.status === (site.e_code || 200);
+            const stringOk = site.e_string ? body.includes(site.e_string) : true;
+            const notMissing = site.m_string ? !body.includes(site.m_string) : true;
+            if (statusOk && stringOk && notMissing) {
+              entities.push(ent("social_profile", url.replace(`/${encodeURIComponent(clean)}`, `/${clean}`), "whatsmyname", 82, {
+                platform: site.name, category: site.cat, username: clean,
+              }));
+            }
+          } catch {}
+        }));
+      }
+
+      emit({ type: "log", data: { message: `WhatsMyName: ${checked} sites vérifiés, ${entities.length} profils trouvés` } });
+      return { success: entities.length > 0, data: { checked, found: entities.length }, entities };
     },
   },
 ];
@@ -647,6 +707,87 @@ export const phoneModulesExtra = [
       return { success: entities.length > 0, data: { found: entities.length }, entities };
     },
   },
+
+  // ---- Ignorant (phone → Instagram / Snapchat / Amazon) ----
+  {
+    id: "ignorant",
+    name: "Ignorant (phone → social accounts)",
+    category: "phone",
+    targetTypes: ["phone"],
+    priority: 1,
+    isAvailable: async () => {
+      const r = await tryExec("ignorant --help 2>&1");
+      return !!(r?.stdout || r?.stderr);
+    },
+    execute: async (target: string, emit: any) => {
+      emit({ type: "log", data: { message: `Ignorant: checking ${target} on Instagram/Snapchat/Amazon...` } });
+      const entities: any[] = [];
+
+      // Normaliser: +33769723999 → country_code=33, phone=769723999
+      const clean = target.replace(/\s/g, "");
+      let countryCode = "33";
+      let phone = clean;
+      if (clean.startsWith("+")) {
+        const match = clean.match(/^\+(\d{1,3})(\d+)$/);
+        if (match) { countryCode = match[1]; phone = match[2]; }
+      } else if (clean.startsWith("0")) {
+        phone = clean.slice(1);
+      }
+
+      const env = `set PYTHONHTTPSVERIFY=0 && set PYTHONWARNINGS=ignore && `;
+      const r = await tryExec(`${env}ignorant ${countryCode} ${phone} --no-color --no-clear 2>&1`, 30000);
+      if (!r) return { success: false, data: null, entities: [] };
+
+      const rawOutput = r.stdout + (r.stderr || "");
+
+      // Nettoyer: supprimer carriage returns, barres de progression tqdm, séquences ANSI
+      const cleanOutput = rawOutput
+        .replace(/\r/g, "\n")
+        .replace(/\x1b\[[0-9;]*m/g, "")
+        .replace(/[^\x20-\x7E\n]/g, " ");
+
+      const KNOWN_DOMAINS = new Set(["instagram.com", "snapchat.com", "amazon.com"]);
+      const urlMap: Record<string, string> = {
+        "instagram.com": "https://www.instagram.com/",
+        "snapchat.com":  "https://www.snapchat.com/",
+        "amazon.com":    "https://www.amazon.fr/",
+      };
+
+      const results: Record<string, "found" | "not_found" | "rate_limit"> = {};
+
+      const lines = cleanOutput.split("\n");
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const found   = trimmed.match(/^\[\+\]\s*([\w.-]+\.\w+)\s*$/);
+        const notUsed = trimmed.match(/^\[-\]\s*([\w.-]+\.\w+)\s*$/);
+        const rateL   = trimmed.match(/^\[x\]\s*([\w.-]+\.\w+)\s*$/);
+
+        if (found) {
+          const domain = found[1].trim();
+          results[domain] = "found";
+          if (KNOWN_DOMAINS.has(domain)) {
+            entities.push(ent(
+              "social_profile",
+              urlMap[domain],
+              "ignorant", 90,
+              { platform: domain, phone: target, registered: true }
+            ));
+            emit({ type: "log", data: { message: `Ignorant: ✅ ${domain} — numéro enregistré !` } });
+          }
+        }
+        if (notUsed) {
+          results[notUsed[1].trim()] = "not_found";
+        }
+        if (rateL) {
+          results[rateL[1].trim()] = "rate_limit";
+          emit({ type: "log", data: { message: `Ignorant: ⚠ rate limit sur ${rateL[1].trim()}` } });
+        }
+      }
+
+      emit({ type: "log", data: { message: `Ignorant: résumé — ${JSON.stringify(results)}` } });
+      return { success: true, data: { results, found: entities.length }, entities, rawOutput: cleanOutput };
+    },
+  },
 ];
 
 // ============================================================================
@@ -865,6 +1006,265 @@ export const personModulesExtra = [
       return { success: entities.length > 0, data: { found: entities.length, variants: toCheck }, entities };
     },
   },
+
+  // ---- CrossLinked (LinkedIn enumeration via Google/Bing, sans login) ----
+  {
+    id: "crosslinked",
+    name: "CrossLinked (LinkedIn via search engines)",
+    category: "person",
+    targetTypes: ["person", "username"],
+    priority: 2,
+    isAvailable: async () => {
+      const r = await tryExec("crosslinked --help 2>&1");
+      return !!(r?.stdout?.includes("CrossLinked") || r?.stderr?.includes("CrossLinked"));
+    },
+    execute: async (target: string, emit: any) => {
+      emit({ type: "log", data: { message: `CrossLinked: LinkedIn search for "${target}"...` } });
+      const entities: any[] = [];
+
+      // CrossLinked attend une entreprise OU un nom
+      // On utilise le nom comme query directe avec format {f}{last}
+      const env = process.platform === "win32" ? "set PYTHONHTTPSVERIFY=0 && " : "PYTHONHTTPSVERIFY=0 ";
+      const r = await tryExec(
+        `${env}crosslinked -f "{first} {last}" -t 15 "${target}" 2>&1`,
+        45000
+      );
+      if (!r) return { success: false, data: null, entities: [] };
+
+      const output = r.stdout + (r.stderr || "");
+      emit({ type: "log", data: { message: `CrossLinked output: ${output.replace(/\n/g, " ").slice(0, 200)}` } });
+
+      // Parser les noms trouvés
+      const nameLines = output.split("\n").filter((l: string) => l.match(/^\s*\[\+\]|Found:/i));
+      for (const line of nameLines.slice(0, 20)) {
+        const name = line.replace(/\[\+\]|\[Found\]|Found:/gi, "").trim();
+        if (name && name.length > 2) {
+          entities.push(ent("person", name, "crosslinked", 72, {
+            source: "linkedin_via_google", query: target
+          }));
+        }
+      }
+
+      // Parser aussi les profils LinkedIn directs si trouvés
+      const linkedinUrls = [...output.matchAll(/https:\/\/(?:www\.)?linkedin\.com\/in\/[\w-]+/g)]
+        .map(m => m[0]);
+      for (const url of [...new Set(linkedinUrls)].slice(0, 10)) {
+        entities.push(ent("social_profile", url, "crosslinked", 80, {
+          platform: "LinkedIn", query: target
+        }));
+      }
+
+      // Lire le fichier names.txt généré par crosslinked
+      try {
+        if (fs.existsSync("names.txt")) {
+          const names = fs.readFileSync("names.txt", "utf-8").split("\n").filter(Boolean);
+          for (const name of names.slice(0, 20)) {
+            if (!entities.find(e => e.value === name.trim())) {
+              entities.push(ent("person", name.trim(), "crosslinked", 70, {
+                source: "linkedin_scrape", query: target
+              }));
+            }
+          }
+        }
+      } catch {}
+
+      return { success: entities.length > 0, data: { found: entities.length }, entities, rawOutput: output };
+    },
+  },
+];
+
+// ============================================================================
+// IMAGE MODULES — Reverse image search
+// ============================================================================
+
+export const imageModulesExtra = [
+  {
+    id: "reverse_image_search",
+    name: "Reverse Image Search (Yandex + GoogleLens + Bing)",
+    category: "image",
+    targetTypes: ["image_url", "avatar", "url"],
+    priority: 1,
+    isAvailable: async () => {
+      const r = await tryExec("python -c \"from PicImageSearch import Yandex; print('ok')\" 2>&1");
+      return !!(r?.stdout?.includes("ok"));
+    },
+    execute: async (target: string, emit: any) => {
+      // Filtrer: on n'accepte que les URLs de type image
+      const imgExt = /\.(jpg|jpeg|png|webp|gif|bmp)(\?|$)/i;
+      const isImgUrl = imgExt.test(target) || target.includes("profile_pic") || target.includes("avatar") || target.includes("photo");
+      if (!isImgUrl) return { success: false, data: { skipped: true, reason: "not_an_image_url" }, entities: [] };
+
+      emit({ type: "log", data: { message: `Reverse image search: ${target.slice(0, 80)}...` } });
+      const entities: any[] = [];
+      const seen = new Set<string>();
+
+      // Appel Python: PicImageSearch via subprocess
+      const script = `
+import asyncio, json, sys
+from PicImageSearch import Yandex, GoogleLens, Bing
+
+IMG = sys.argv[1]
+
+async def run():
+    results = []
+    engines = []
+    try:
+        y = Yandex(verify_ssl=False)
+        r = await y.search(url=IMG)
+        for item in (r.raw or [])[:15]:
+            results.append({
+                "engine": "yandex",
+                "title": getattr(item, "title", ""),
+                "url": getattr(item, "url", ""),
+                "source": getattr(item, "source", ""),
+                "similarity": getattr(item, "similarity", 0),
+                "content": getattr(item, "content", ""),
+            })
+        engines.append("yandex")
+    except Exception as e:
+        pass
+
+    try:
+        g = GoogleLens(verify_ssl=False)
+        r = await g.search(url=IMG)
+        for item in (r.raw or [])[:10]:
+            results.append({
+                "engine": "google_lens",
+                "title": getattr(item, "title", ""),
+                "url": getattr(item, "url", ""),
+                "source": getattr(item, "source", ""),
+                "similarity": 0,
+                "content": getattr(item, "description", "") or getattr(item, "content", ""),
+            })
+        engines.append("google_lens")
+    except Exception as e:
+        pass
+
+    try:
+        b = Bing(verify_ssl=False)
+        r = await b.search(url=IMG)
+        for item in (r.raw or [])[:10]:
+            results.append({
+                "engine": "bing",
+                "title": getattr(item, "title", ""),
+                "url": getattr(item, "url", ""),
+                "source": getattr(item, "source", ""),
+                "similarity": 0,
+                "content": getattr(item, "description", "") or getattr(item, "content", ""),
+            })
+        engines.append("bing")
+    except Exception as e:
+        pass
+
+    print(json.dumps({"engines": engines, "results": results}))
+
+asyncio.run(run())
+`.trim();
+
+      const scriptPath = path.join(__dirname, "..", "..", "reverse_img_worker.py");
+      fs.writeFileSync(scriptPath, script, "utf-8");
+
+      const env = process.platform === "win32"
+        ? `set PYTHONHTTPSVERIFY=0 && set PYTHONWARNINGS=ignore && `
+        : `PYTHONHTTPSVERIFY=0 `;
+      const r = await tryExec(
+        `${env}python "${scriptPath}" "${target}" 2>&1`,
+        30000
+      );
+
+      if (!r) return { success: false, data: null, entities: [] };
+
+      const output = r.stdout + (r.stderr || "");
+      // Extraire la ligne JSON (ignorer les warnings Python)
+      const jsonLine = output.split("\n").find((l: string) => l.trim().startsWith("{"));
+      if (!jsonLine) {
+        emit({ type: "log", data: { message: `Reverse image: pas de résultat JSON. Output: ${output.slice(0, 200)}` } });
+        return { success: false, data: null, entities: [] };
+      }
+
+      let parsed: any;
+      try { parsed = JSON.parse(jsonLine); } catch { return { success: false, data: null, entities: [] }; }
+
+      const results: any[] = parsed.results || [];
+      emit({ type: "log", data: { message: `Reverse image: ${results.length} résultats (moteurs: ${(parsed.engines || []).join(", ")})` } });
+
+      // Extraire les entités pertinentes
+      const SOCIAL_PATTERNS: Record<string, string> = {
+        "instagram.com": "Instagram",
+        "twitter.com": "Twitter/X",
+        "x.com": "Twitter/X",
+        "sotwe.com": "Twitter/X",
+        "facebook.com": "Facebook",
+        "linkedin.com": "LinkedIn",
+        "tiktok.com": "TikTok",
+        "pinterest.com": "Pinterest",
+        "reddit.com": "Reddit",
+        "youtube.com": "YouTube",
+        "github.com": "GitHub",
+        "t.me": "Telegram",
+        "vk.com": "VKontakte",
+        "snapchat.com": "Snapchat",
+      };
+
+      for (const item of results) {
+        if (!item.url || seen.has(item.url)) continue;
+        seen.add(item.url);
+
+        const domain = item.source || item.url.match(/https?:\/\/([^/]+)/)?.[1] || "";
+        const platform = Object.entries(SOCIAL_PATTERNS).find(([d]) => domain.includes(d))?.[1];
+
+        if (platform) {
+          // C'est un profil social → social_profile
+          entities.push(ent("social_profile", item.url, "reverse_image_search", 82, {
+            platform, title: item.title, engine: item.engine,
+            imageSource: target, similarity: item.similarity,
+          }));
+          emit({ type: "log", data: { message: `Reverse image: ✅ ${platform} → ${item.url.slice(0, 80)}` } });
+        } else if (item.title || item.content) {
+          // Autre page contenant l'image
+          entities.push(ent("url", item.url, "reverse_image_search", 70, {
+            title: item.title, source: domain,
+            engine: item.engine, imageSource: target,
+            content: (item.content || "").slice(0, 200),
+          }));
+        }
+
+        // Extraire username depuis URL Instagram/Twitter
+        const igUser = item.url.match(/instagram\.com\/([A-Za-z0-9._]+)\/?/)?.[1];
+        if (igUser && igUser !== "p" && igUser !== "explore") {
+          entities.push(ent("username", igUser, "reverse_image_search", 85, {
+            platform: "Instagram", derivedFrom: "reverse_image", imageUrl: target,
+          }));
+        }
+        const twUser = item.url.match(/(?:twitter|x)\.com\/([A-Za-z0-9_]+)\/?/)?.[1];
+        if (twUser && !["search", "home", "explore", "i"].includes(twUser)) {
+          entities.push(ent("username", twUser, "reverse_image_search", 82, {
+            platform: "Twitter/X", derivedFrom: "reverse_image", imageUrl: target,
+          }));
+        }
+        // Extraire username Telegram depuis t.me URLs
+        const tgUser = item.url.match(/t\.me\/([A-Za-z0-9_]+)/)?.[1];
+        if (tgUser && !["share", "s"].includes(tgUser)) {
+          entities.push(ent("username", tgUser, "reverse_image_search", 78, {
+            platform: "Telegram", derivedFrom: "reverse_image", imageUrl: target,
+          }));
+        }
+        // Extraire username depuis sotwe.com (mirror Twitter)
+        const sotweUser = item.url.match(/sotwe\.com\/([A-Za-z0-9_]+)/)?.[1];
+        if (sotweUser && !["hashtag", "search"].includes(sotweUser)) {
+          entities.push(ent("username", sotweUser, "reverse_image_search", 80, {
+            platform: "Twitter/X", derivedFrom: "reverse_image_sotwe", imageUrl: target,
+          }));
+        }
+      }
+
+      return {
+        success: entities.length > 0,
+        data: { total: results.length, entitiesFound: entities.length, engines: parsed.engines },
+        entities,
+      };
+    },
+  },
 ];
 
 // ============================================================================
@@ -876,4 +1276,5 @@ export const NewModulesExtra = [
   ...emailModulesExtra,
   ...phoneModulesExtra,
   ...personModulesExtra,
+  ...imageModulesExtra,
 ];

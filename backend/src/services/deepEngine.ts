@@ -6,14 +6,22 @@
 import { exec } from "child_process";
 import { promisify } from "util";
 import axios from "axios";
+import https from "https";
 import { EventEmitter } from "events";
 import { logger } from "../utils/logger";
 import { config as dotenvConfig } from "dotenv";
 import path from "path";
 import { NewModules } from "./newModules";
 import { NewModulesExtra } from "./newModulesExtra";
+import { advancedAnalysisModules } from "./advancedAnalysisModules";
+import { socialMediaExtendedModules } from "./socialMediaExtended";
+import { nameIntelProModules } from "./nameIntelPro";
+import { usernameHunterProModules } from "./usernameHunterPro";
 import { SocialDeepModules } from "./socialDeepScan";
-import { IgProfileModule, IgContactModule, IgNetworkModule, IgGeoModule, IgStoriesModule, IgHashtagModule, IgTaggedModule, IgCrossPlatformModule, IgAltAccountsModule, IgInstalaoderModule, IgOsintgramModule, IgHikerApiModule } from "./instagramEngine";
+import { IgProfileModule, IgPhoneLookupModule, IgContactModule, IgNetworkModule, IgGeoModule, IgStoriesModule, IgHashtagModule, IgTaggedModule, IgCrossPlatformModule, IgAltAccountsModule, IgInstalaoderModule, IgOsintgramModule, IgHikerApiModule, IgPostsReelsModule } from "./instagramEngine";
+import { instagramUltimateModules } from "./instagramUltimate";
+import { instagramUltimate2Modules } from "./instagramUltimate2";
+import { DorkAndNameModules } from "./dorkAndNameModules";
 import { DorkIntelligence, UsernameIntelligence } from "./advancedEngine";
 // Load .env immediately — ensures API keys are in process.env before module init
 dotenvConfig({ path: path.resolve(process.cwd(), ".env") });
@@ -104,17 +112,48 @@ interface ModuleResult {
 }
 
 // ---- Module Implementation Helpers ----
+// Build an enriched PATH that includes all known OSINT tool directories
+function buildToolPATH(): string {
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  const sep = process.platform === "win32" ? ";" : ":";
+  const extras = [
+    `${home}\\osint-tools`,
+    `${home}\\.local\\bin`,
+    `C:\\tools\\pd`,
+    `C:\\tools\\phoneinfoga`,
+    `C:\\Program Files (x86)\\Nmap`,
+    `C:\\Program Files\\Nmap`,
+    `${home}\\AppData\\Local\\Programs\\Python\\Python312\\Scripts`,
+    `${home}\\AppData\\Local\\Programs\\Python\\Python313\\Scripts`,
+    `${home}\\AppData\\Roaming\\Python\\Python312\\Scripts`,
+    `${home}\\AppData\\Roaming\\Python\\Python313\\Scripts`,
+    `${home}\\go\\bin`,
+    `C:\\Go\\bin`,
+    `C:\\Strawberry\\perl\\bin`,
+    `C:\\Strawberry\\perl\\site\\bin`,
+    `C:\\Strawberry\\c\\bin`,
+  ];
+  return `${process.env.PATH || ""}${sep}${extras.join(sep)}`;
+}
+const TOOL_PATH = buildToolPATH();
+
 async function tryExec(cmd: string, timeoutMs = 30000): Promise<{ stdout: string; stderr: string } | null> {
   try {
-    return await execAsync(cmd, { timeout: timeoutMs, maxBuffer: 10 * 1024 * 1024 });
+    return await execAsync(cmd, {
+      timeout: timeoutMs,
+      maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, PATH: TOOL_PATH },
+    });
   } catch (e: any) {
     return e.stdout ? { stdout: e.stdout, stderr: e.stderr || "" } : null;
   }
 }
 
+const NO_SSL_AGENT = new https.Agent({ rejectUnauthorized: false });
+
 async function tryHttp(url: string, options: any = {}): Promise<any> {
   try {
-    const res = await axios.get(url, { timeout: 15000, ...options });
+    const res = await axios.get(url, { timeout: 15000, httpsAgent: NO_SSL_AGENT, validateStatus: () => true, ...options });
     return res.data;
   } catch {
     return null;
@@ -123,7 +162,7 @@ async function tryHttp(url: string, options: any = {}): Promise<any> {
 
 async function tryHttpPost(url: string, body: any, options: any = {}): Promise<any> {
   try {
-    const res = await axios.post(url, body, { timeout: 15000, ...options });
+    const res = await axios.post(url, body, { timeout: 15000, httpsAgent: NO_SSL_AGENT, validateStatus: () => true, ...options });
     return res.data;
   } catch {
     return null;
@@ -506,19 +545,43 @@ const MODULES: OSINTModule[] = [
   {
     id: "phoneinfoga", name: "PhoneInfoga", category: "phone", targetTypes: ["phone"],
     priority: 1,
-    isAvailable: async () => { const r = await tryExec("phoneinfoga version"); return !!r; },
+    isAvailable: async () => {
+      // Chercher dans osint-tools ou PATH
+      const home = process.env.USERPROFILE || process.env.HOME || "";
+      const candidates = [
+        `${home}\\osint-tools\\phoneinfoga.exe`,
+        `${home}\\osint-tools\\phoneinfoga`,
+        "phoneinfoga",
+      ];
+      for (const bin of candidates) {
+        const r = await tryExec(`"${bin}" version 2>&1`);
+        if (r?.stdout?.includes("PhoneInfoga")) return true;
+      }
+      return false;
+    },
     execute: async (target, emit) => {
       emit({ type: "log", data: { message: `Scanning phone number ${target}...` } });
-      const r = await tryExec(`phoneinfoga scan -n "${target}"`, 30000);
+      const home = process.env.USERPROFILE || process.env.HOME || "";
+      const bin = `${home}\\osint-tools\\phoneinfoga.exe`;
+      const r = await tryExec(`"${bin}" scan -n "${target}" 2>&1`, 30000);
       if (!r) return { success: false, data: null, entities: [] };
+      const out = r.stdout + (r.stderr || "");
+      emit({ type: "log", data: { message: `PhoneInfoga: ${out.split("\n").find(l => l.includes("Country") || l.includes("Local")) || "scan done"}` } });
       const entities: DeepEntity[] = [];
-      // Parse carrier, country, line type
-      const carrier = r.stdout.match(/Carrier:\s*(.+)/i)?.[1]?.trim();
-      const country = r.stdout.match(/Country:\s*(.+)/i)?.[1]?.trim();
-      const lineType = r.stdout.match(/Line type:\s*(.+)/i)?.[1]?.trim();
-      if (carrier) entities.push({ id: makeEntityId(), type: "organization", value: carrier, source: "phoneinfoga", confidence: 85, metadata: { phone: target, role: "carrier" }, verified: true, depth: 0 });
-      if (country) entities.push({ id: makeEntityId(), type: "location", value: country, source: "phoneinfoga", confidence: 90, metadata: { phone: target }, verified: true, depth: 0 });
-      return { success: true, data: { carrier, country, lineType, raw: r.stdout }, entities, rawOutput: r.stdout };
+      const country   = out.match(/Country:\s*([A-Z]{2,})/i)?.[1]?.trim();
+      const local     = out.match(/Local:\s*(.+)/i)?.[1]?.trim();
+      const e164      = out.match(/E164:\s*(.+)/i)?.[1]?.trim();
+      const carrier   = out.match(/Carrier:\s*(.+)/i)?.[1]?.trim();
+      const lineType  = out.match(/Line type:\s*(.+)/i)?.[1]?.trim();
+      if (country)  entities.push({ id: makeEntityId(), type: "location", value: country, source: "phoneinfoga", confidence: 90, metadata: { phone: target }, verified: true, depth: 0 });
+      if (carrier)  entities.push({ id: makeEntityId(), type: "organization", value: carrier, source: "phoneinfoga", confidence: 85, metadata: { phone: target, role: "carrier" }, verified: true, depth: 0 });
+      if (e164 || local) entities.push({ id: makeEntityId(), type: "phone", value: e164 || target, source: "phoneinfoga", confidence: 95, metadata: { local, e164, lineType, country }, verified: true, depth: 0 });
+      // Extraire les URLs de dork générées
+      const dorkUrls = [...out.matchAll(/URL:\s*(https?:\/\/[^\s]+)/g)].map(m => m[1].trim());
+      for (const url of dorkUrls.slice(0, 5)) {
+        entities.push({ id: makeEntityId(), type: "url", value: url, source: "phoneinfoga", confidence: 60, metadata: { type: "dork_query", phone: target }, verified: false, depth: 0 });
+      }
+      return { success: true, data: { country, carrier, lineType, local, e164 }, entities, rawOutput: out };
     },
   },
   {
@@ -583,10 +646,12 @@ const MODULES: OSINTModule[] = [
         const clean = target.replace(/[\s()+\-]/g, "");
         const resp = await axios.get(`https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${clean}`, {
           timeout: 15000,
+          httpsAgent: NO_SSL_AGENT,
           headers: { 
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept-Language": "fr-FR,fr;q=0.9",
-            "Accept": "text/html,application/xhtml+xml"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": "https://www.pagesjaunes.fr/"
           },
           validateStatus: () => true,
         } as any);
@@ -598,39 +663,41 @@ const MODULES: OSINTModule[] = [
         if (html.includes("captcha") || html.includes("robot") || html.includes("bloqué")) {
           emit({ type: "log", data: { message: "PagesJaunes: Blocked by anti-bot" } });
         } else {
-          // Improved regex patterns for extracting data
-          // Pattern 1: denomination links
-          const nameMatches = html.match(/class="[^"]*denomination[^"]*"[^>]*>([^<]+)/gi) || [];
-          for (const match of nameMatches.slice(0, 5)) {
-            const name = match.replace(/<[^>]+>/g, "").trim();
-            if (name && name.length > 2 && !name.includes("PagesJaunes")) {
-              entities.push({ 
-                id: makeEntityId(), type: "person", value: name, 
-                source: "pagesjaunes", confidence: 75, metadata: { phone: target }, 
-                verified: false, depth: 0 
-              });
+          // Pattern 1: noms (denomination, bi-name, person-name)
+          const nameRe = /(?:denomination|bi-name|person-?name|result-name|identity)[^>]*>\s*([A-ZÀ-Ÿa-zà-ÿ][\w\s\-'éèêëàâùûüïîôç]{2,40})\s*</gi;
+          for (const m of [...html.matchAll(nameRe)].slice(0, 5)) {
+            const name = m[1].trim();
+            if (name.length > 2 && !/page|jaune|blanc|cookie|cgu/i.test(name)) {
+              entities.push({ id: makeEntityId(), type: "person", value: name, source: "pagesjaunes", confidence: 78, metadata: { phone: target }, verified: false, depth: 0 });
             }
           }
-          
-          // Pattern 2: address data
-          const addrMatches = html.match(/class="[^"]*address[^"]*"[^>]*>([^<]+)/gi) || [];
-          for (const match of addrMatches.slice(0, 5)) {
-            const addr = match.replace(/<[^>]+>/g, "").trim();
-            if (addr && addr.length > 5) {
-              entities.push({ 
-                id: makeEntityId(), type: "location", value: addr, 
-                source: "pagesjaunes", confidence: 70, metadata: { phone: target }, 
-                verified: false, depth: 0 
-              });
-            }
+          // Pattern 2: JSON-LD
+          const ldMatch = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/si);
+          if (ldMatch) {
+            try {
+              const ld = JSON.parse(ldMatch[1]);
+              const items = Array.isArray(ld) ? ld : [ld];
+              for (const item of items) {
+                if (item.name) entities.push({ id: makeEntityId(), type: "person", value: item.name, source: "pagesjaunes_ld", confidence: 85, metadata: { phone: target }, verified: true, depth: 0 });
+                if (item.address?.streetAddress) entities.push({ id: makeEntityId(), type: "location", value: [item.address.streetAddress, item.address.postalCode, item.address.addressLocality].filter(Boolean).join(" "), source: "pagesjaunes_ld", confidence: 88, metadata: { phone: target }, verified: true, depth: 0 });
+                if (item.telephone) entities.push({ id: makeEntityId(), type: "phone", value: item.telephone, source: "pagesjaunes_ld", confidence: 95, metadata: { confirmed: true }, verified: true, depth: 0 });
+              }
+            } catch {}
           }
-          
-          // Pattern 3: Generic text extraction (fallback)
+          // Pattern 3: adresse postale
+          const addrRe = /(?:address|adresse|localite|street)[^>]*>([^<]{5,80})</gi;
+          for (const m of [...html.matchAll(addrRe)].slice(0, 5)) {
+            const a = m[1].replace(/&amp;/g, "&").trim();
+            if (a.length > 5 && /\d/.test(a)) entities.push({ id: makeEntityId(), type: "location", value: a, source: "pagesjaunes", confidence: 72, metadata: { phone: target }, verified: false, depth: 0 });
+          }
+          // Pattern 4: og:title fallback
           if (entities.length === 0) {
-            const titleMatch = html.match(/<title>([^<]+)/i);
-            if (titleMatch && !titleMatch[1].includes("erreur")) {
-              emit({ type: "log", data: { message: `PagesJaunes loaded: ${titleMatch[1].slice(0, 60)}` } });
+            const ogTitle = html.match(/<meta property="og:title" content="([^"]+)"/i)?.[1];
+            const ogDesc  = html.match(/<meta property="og:description" content="([^"]+)"/i)?.[1];
+            if (ogTitle && !/pagesjaunes|pages jaunes/i.test(ogTitle)) {
+              entities.push({ id: makeEntityId(), type: "person", value: ogTitle.trim(), source: "pagesjaunes_og", confidence: 70, metadata: { phone: target, description: ogDesc }, verified: false, depth: 0 });
             }
+            emit({ type: "log", data: { message: `PagesJaunes: page chargée, title="${(ogTitle||'').slice(0,60)}"` } });
           }
         }
       } catch (e: any) {
@@ -3631,47 +3698,61 @@ const MODULES: OSINTModule[] = [
       const isPhone = /\+?[\d\s()-]{7,}/.test(target);
       
       try {
-        // Pages Blanches
         const query = isPhone ? target.replace(/[\s()+\-]/g, "") : encodeURIComponent(target);
-        const url = isPhone
-          ? `https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${query}`
-          : `https://www.pagesblanches.fr/annuaire/recherche?quoiqui=${encodeURIComponent(target)}&ou=france`;
-        const resp = await axios.get(url, {
-          timeout: 10000,
-          headers: { 
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept-Language": "fr-FR,fr;q=0.9"
-          },
-          validateStatus: () => true,
-        } as any);
+        // Essayer les deux annuaires
+        const urls = isPhone
+          ? [`https://www.pagesblanches.fr/annuaireinverse/recherche?quoiqui=${query}`, `https://www.pagesjaunes.fr/annuaireinverse/recherche?quoiqui=${query}`]
+          : [`https://www.pagesblanches.fr/annuaire/recherche?quoiqui=${encodeURIComponent(target)}&ou=france`];
         
-        pageLoaded = resp.status === 200;
-        const html = resp.data as string;
-        
-        // Check for blocking
-        if (html.includes("captcha") || html.includes("robot")) {
-          emit({ type: "log", data: { message: "Annuaires FR: Blocked by anti-bot" } });
+        let html = "";
+        for (const url of urls) {
+          const resp = await axios.get(url, {
+            timeout: 10000, httpsAgent: NO_SSL_AGENT,
+            headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124", "Accept-Language": "fr-FR,fr;q=0.9", "Accept": "text/html" },
+            validateStatus: () => true,
+          } as any);
+          if (resp.status === 200 && resp.data) { html = resp.data as string; pageLoaded = true; break; }
+        }
+        if (!pageLoaded) {
+          emit({ type: "log", data: { message: "Annuaires FR: aucune page chargée" } });
+        } else if (html.includes("captcha") || html.includes("robot")) {
+          emit({ type: "log", data: { message: "Annuaires FR: Bloqué anti-bot" } });
         } else {
-          // Extract names
-          const nameMatches = [...html.matchAll(/class="[^"]*denomination[^"]*"[^>]*>([^<]+)/gi)];
-          for (const m of nameMatches.slice(0, 5)) {
+          // JSON-LD (le plus fiable)
+          for (const ldRaw of html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi)) {
+            try {
+              const ld = JSON.parse(ldRaw[1]);
+              const items = Array.isArray(ld) ? ld : [ld];
+              for (const item of items) {
+                if (item.name && !/blanc|jaune|page/i.test(item.name))
+                  entities.push({ id: makeEntityId(), type: "person", value: item.name, source: "annuaires_fr", confidence: 88, metadata: { query: target }, verified: true, depth: 0 });
+                if (item.address?.streetAddress)
+                  entities.push({ id: makeEntityId(), type: "location", value: [item.address.streetAddress, item.address.postalCode, item.address.addressLocality].filter(Boolean).join(" "), source: "annuaires_fr", confidence: 85, metadata: { query: target }, verified: true, depth: 0 });
+                if (item.telephone && item.telephone !== target)
+                  entities.push({ id: makeEntityId(), type: "phone", value: item.telephone, source: "annuaires_fr", confidence: 90, metadata: { confirmed: true }, verified: true, depth: 0 });
+              }
+            } catch {}
+          }
+          // Regex noms
+          const nameRe = /(?:denomination|bi-name|result-name|identity|prenom-nom)[^>]*>\s*([A-ZÀ-Ÿa-zà-ÿ][\w\s\-'éèêëàâùûüïîôç]{2,40})\s*</gi;
+          for (const m of [...html.matchAll(nameRe)].slice(0, 5)) {
             const name = m[1].trim();
-            if (name.length > 2 && !name.includes("<")) {
-              entities.push({ id: makeEntityId(), type: "person", value: name, source: "annuaires_fr", confidence: 75, metadata: { query: target, source: "pagesblanches" }, verified: false, depth: 0 });
-            }
+            if (name.length > 2 && !/page|jaune|blanc|cookie/i.test(name))
+              entities.push({ id: makeEntityId(), type: "person", value: name, source: "annuaires_fr", confidence: 75, metadata: { query: target }, verified: false, depth: 0 });
           }
-          // Extract addresses
-          const addrMatches = [...html.matchAll(/class="[^"]*address[^"]*"[^>]*>([^<]+)/gi)];
-          for (const m of addrMatches.slice(0, 5)) {
-            const addr = m[1].trim();
-            if (addr.length > 5 && /\d/.test(addr)) {
-              entities.push({ id: makeEntityId(), type: "location", value: addr, source: "annuaires_fr", confidence: 70, metadata: { query: target }, verified: false, depth: 0 });
-            }
+          // Regex adresses
+          for (const m of [...html.matchAll(/(?:address|adresse|localite)[^>]*>([^<]{5,80})</gi)].slice(0, 5)) {
+            const a = m[1].replace(/&amp;/g, "&").trim();
+            if (a.length > 5 && /\d/.test(a))
+              entities.push({ id: makeEntityId(), type: "location", value: a, source: "annuaires_fr", confidence: 70, metadata: { query: target }, verified: false, depth: 0 });
           }
-          // Extract phones
-          const phoneMatches = [...html.matchAll(/\b0[1-9](?:[\s.-]?\d{2}){4}\b/g)];
-          for (const m of [...new Set(phoneMatches.map(m => m[0]))].slice(0, 3)) {
-            entities.push({ id: makeEntityId(), type: "phone", value: m, source: "annuaires_fr", confidence: 80, metadata: { query: target }, verified: false, depth: 0 });
+          // og:title fallback
+          if (entities.length === 0) {
+            const ogTitle = html.match(/<meta property="og:title" content="([^"]+)"/i)?.[1];
+            const ogDesc  = html.match(/<meta property="og:description" content="([^"]+)"/i)?.[1];
+            emit({ type: "log", data: { message: `Annuaires FR: page OK, title="${(ogTitle||"").slice(0,60)}"` } });
+            if (ogTitle && !/pages? (blanches|jaunes)/i.test(ogTitle))
+              entities.push({ id: makeEntityId(), type: "person", value: ogTitle.trim(), source: "annuaires_fr_og", confidence: 68, metadata: { query: target, description: ogDesc }, verified: false, depth: 0 });
           }
         }
       } catch (e: any) {
@@ -3996,10 +4077,23 @@ const MODULES: OSINTModule[] = [
   // ---- EXTRA MODULES (Phase 2: username/email/phone/person) ----
   ...(NewModulesExtra as any[]),
 
+  // ---- ADVANCED ANALYSIS (Sprint 2: OCR/EXIF, darkweb, stylometry, behavioral, trust scoring) ----
+  ...(advancedAnalysisModules as any[]),
+
+  // ---- SOCIAL MEDIA EXTENDED (Bluesky, Mastodon, Threads, Twitch, TikTok, VK, Pinterest, ...) ----
+  ...(socialMediaExtendedModules as any[]),
+
+  // ---- NAME INTELLIGENCE PRO (TruePeopleSearch, Radaris, 192.com, Gravatar, INSEE, OpenCorporates) ----
+  ...(nameIntelProModules as any[]),
+
+  // ---- USERNAME HUNTER PRO (Blackbird, Marple, variations, meta-aggregator, IdCrawl, Nexfil, Userrecon) ----
+  ...(usernameHunterProModules as any[]),
+
   // ---- SOCIAL DEEP SCAN (Phase 3: SpiderFoot, Twitter/X deep, FB, Reddit, GitHub, Instagram...) ----
   ...(SocialDeepModules as any[]),
 
-  // ---- INSTAGRAM ENGINE (Phase 4: moteur ultra Instagram 12 modules) ----
+  // ---- INSTAGRAM ENGINE (Phase 4: moteur ultra Instagram 13 modules) ----
+  IgPhoneLookupModule as any,
   IgProfileModule as any,
   IgContactModule as any,
   IgNetworkModule as any,
@@ -4012,6 +4106,16 @@ const MODULES: OSINTModule[] = [
   IgInstalaoderModule as any,
   IgOsintgramModule as any,
   IgHikerApiModule as any,
+  IgPostsReelsModule as any,
+
+  // ---- INSTAGRAM ULTIMATE (Phase 6: 10 modules OSINT IG avancés) ----
+  ...(instagramUltimateModules as any[]),
+
+  // ---- INSTAGRAM ULTIMATE 2 (Phase 7: dorks/about/anonymous/exif/captions/tagged_by/osintgram) ----
+  ...(instagramUltimate2Modules as any[]),
+
+  // ---- DORK & NAME INTELLIGENCE (Phase 5: dorking multi-moteur + name intel) ----
+  ...(DorkAndNameModules as any[]),
 ];
 
 // ============================================================================
@@ -4107,6 +4211,13 @@ export class DeepInvestigationEngine extends EventEmitter {
       if (webModule) {
         yield* this.runModule(webModule, target, 0, allEntities, cfg);
       }
+      // Name intelligence pour person/username
+      if (["person", "username"].includes(targetType)) {
+        const nameModule = MODULES.find(m => m.id === "name_intel");
+        if (nameModule) yield* this.runModule(nameModule, target, 0, allEntities, cfg);
+        const clusterModule = MODULES.find(m => m.id === "username_cluster");
+        if (clusterModule) yield* this.runModule(clusterModule, target, 0, allEntities, cfg);
+      }
     }
 
     // Recursive phase - investigate high-confidence discovered entities
@@ -4129,7 +4240,10 @@ export class DeepInvestigationEngine extends EventEmitter {
         const analysis = await this.aiAnalyze(target, targetType, allEntities, allCorrelations);
         yield this.event("ai_analysis", { analysis });
       } catch (e: any) {
-        yield this.event("log", { message: `AI analysis failed: ${e.message}`, level: "warn" });
+        const errMsg = e?.message || String(e);
+        const hint = errMsg.includes("ECONNREFUSED") ? " — Ollama non démarré (lancez: ollama serve)" :
+          errMsg.includes("404") ? " — modèle introuvable (ollama pull llama3.2)" : "";
+        yield this.event("log", { message: `AI analysis failed: ${errMsg}${hint}`, level: "warn" });
       }
     }
 
@@ -4178,6 +4292,21 @@ export class DeepInvestigationEngine extends EventEmitter {
     index?: number, total?: number
   ): AsyncGenerator<StreamEvent> {
     const progress = index !== undefined && total ? Math.round(((index) / total) * 100) : undefined;
+
+    // Re-check availability at execution time (clés API peuvent changer)
+    try {
+      const avail = await mod.isAvailable();
+      if (!avail) {
+        yield this.event("tool_done", {
+          toolId: mod.id, name: mod.name, success: true, skipped: true,
+          reason: "non disponible (clé API manquante ou outil non installé)",
+          entitiesFound: 0, duration: 0,
+          progress: index !== undefined && total ? Math.round(((index + 1) / total) * 100) : undefined,
+        });
+        return;
+      }
+    } catch { /* si isAvailable() jette, on continue quand même */ }
+
     yield this.event("tool_start", { toolId: mod.id, name: mod.name, category: mod.category, target, depth, progress });
 
     // Timeouts by tool category
@@ -4186,7 +4315,7 @@ export class DeepInvestigationEngine extends EventEmitter {
       // Web search (dorking, SearXNG, Jina)
       "advanced_dork", "web_dork", "googledork", "paste_search",
       // API modules (réseau)
-      "usersearch_org", "namechk", "intl_social_check",
+      "usersearch_org", "namechk", "intl_social_check", "whatsmyname_wmn",
       // Social deep
       "twitter_deep", "facebook_osint", "reddit_deep", "github_deep",
       "instagram_deep", "youtube_deep", "linkedin_deep",
@@ -4196,11 +4325,30 @@ export class DeepInvestigationEngine extends EventEmitter {
       "ig_alt_accounts", "ig_instaloader", "ig_osintgram",
       "spiderfoot", "recon_ng", "metagoofil",
       // Phone
-      "phone_enrichment", "numlookup", "carrier_lookup", "annuaires_fr_pro",
+      "ignorant", "ig_phone_lookup", "phone_enrichment", "numlookup", "carrier_lookup", "annuaires_fr_pro",
+      "reverse_image_search", "image_analysis", "darkweb_deep", "stylometry_cluster", "behavioral_profiling", "trust_scoring",
+      // Social extended
+      "bluesky_profile", "mastodon_fediverse", "threads_meta", "twitch_user", "tiktok_user",
+      "vk_user", "pinterest_user", "soundcloud_user", "steam_user", "medium_user",
+      "keybase_user", "hackernews_user", "gitlab_user", "devto_user", "producthunt_user",
+      // Name intel pro
+      "true_people_search", "radaris_people", "uk_192", "github_commit_harvester",
+      "gravatar_profile", "insee_sirene", "companies_house_uk", "opencorporates",
+      "name_to_email", "github_search_by_name",
+      // Username hunter pro
+      "blackbird", "marple", "username_variations_ultra", "username_meta_aggregator",
+      "idcrawl_scrape", "nexfil", "userrecon", "google_people_search",
+      // Instagram Ultimate (Phase 6)
+      "ig_email_lookup", "ig_fullname_search", "ig_comments_harvester", "ig_similar_accounts",
+      "ig_live_status", "ig_username_history", "ig_archived_content",
+      "ig_engagement_analyzer", "ig_mutuals_intersection", "ig_location_posts",
+      // Instagram Ultimate 2 (Phase 7)
+      "ig_google_dorks", "ig_about_account", "ig_anonymous_viewers",
+      "ig_post_exif", "ig_caption_analyzer", "ig_tagged_by", "ig_osint_suite",
       // Email
       "epieos", "hibp", "breachdirectory", "email_linkedin",
       // Person
-      "peoplefinder", "wikidata", "linkedin_public", "name_to_username",
+      "peoplefinder", "wikidata", "linkedin_public", "name_to_username", "crosslinked",
       // Free APIs
       "hackertarget_dns", "hackertarget_subdomains", "hackertarget_reverseip",
       "hackertarget_geoip", "hackertarget_pagelinks", "ipinfo_free",
@@ -4215,13 +4363,19 @@ export class DeepInvestigationEngine extends EventEmitter {
     let result: { success: boolean; data: any; entities: DeepEntity[] } | null = null;
 
     try {
-      const toolPromise = mod.execute(target, () => {});
+      // Context passé aux modules — permet aux modules d'analyse de voir les entités déjà collectées
+      const context = {
+        allEntities: Array.from(allEntities.values()),
+        depth,
+        sessionTime: Date.now() - (cfg as any)._startTime || 0,
+      };
+      const toolPromise = (mod.execute as any)(target, () => {}, context);
       const timeoutPromise = new Promise<null>((resolve) => {
         setTimeout(() => { timedOut = true; resolve(null); }, TOOL_TIMEOUT);
       });
 
       const race = await Promise.race([
-        toolPromise.then(r => ({ type: "result" as const, r })),
+        toolPromise.then((r: any) => ({ type: "result" as const, r })),
         timeoutPromise.then(() => ({ type: "timeout" as const, r: null })),
       ]);
 
@@ -4274,27 +4428,50 @@ export class DeepInvestigationEngine extends EventEmitter {
     if (currentDepth > cfg.maxDepth) return;
     if (Date.now() - startTime > cfg.timeoutMs) return;
 
-    // Find high-confidence entities that can be re-investigated
+    // Auto-chaining ultra : priorisation + plus de modules par entité
+    const effectiveThreshold = Math.min(cfg.recursiveThreshold, 70);
+    const RECURSIVE_TYPES = ["email", "username", "domain", "ip", "phone", "person", "image_url"];
+    // Budget d'entités à investiguer selon profondeur (décroissant)
+    const budgetByDepth = [0, 8, 5, 3, 2, 1];
+    const budget = budgetByDepth[currentDepth] || 1;
+
     const toInvestigate = [...allEntities.values()]
-      .filter(e => e.confidence >= cfg.recursiveThreshold)
+      .filter(e => e.confidence >= effectiveThreshold)
       .filter(e => !processedTargets.has(e.value))
-      .filter(e => ["email", "username", "domain", "ip", "phone", "person"].includes(e.type))
-      .filter(e => e.value !== originalTarget)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 5); // Max 5 recursive targets per depth level
+      .filter(e => RECURSIVE_TYPES.includes(e.type))
+      .filter(e => !["name_intel_variants", "name_intel_emails", "username_variations_ultra", "name_to_email"].includes(e.source)) // skip variantes
+      .filter(e => e.value !== originalTarget && e.value.length >= 3)
+      .sort((a, b) => {
+        // Priorité : username/person d'abord, haute conf, puis les autres
+        const priority: Record<string, number> = { username: 10, person: 9, email: 8, phone: 7, domain: 6, image_url: 5, ip: 4 };
+        const pa = priority[a.type] || 0;
+        const pb = priority[b.type] || 0;
+        if (pa !== pb) return pb - pa;
+        return b.confidence - a.confidence;
+      })
+      .slice(0, budget);
+
+    // Nombre de modules par entité selon le type (focus nom/username/social)
+    const modulesPerType: Record<string, number> = {
+      username: 12, person: 10, email: 8, phone: 6, domain: 5, ip: 4, image_url: 3,
+    };
 
     for (const entity of toInvestigate) {
       if (Date.now() - startTime > cfg.timeoutMs) break;
       if (allEntities.size >= cfg.maxEntities) break;
 
       yield this.event("recursive_launch", {
-        entity,
-        depth: currentDepth,
-        message: `Recursive investigation depth ${currentDepth}: ${entity.type} "${entity.value}"`,
+        entity, depth: currentDepth,
+        message: `Recursive depth ${currentDepth}: ${entity.type} "${entity.value.slice(0, 40)}"`,
       });
 
       processedTargets.add(entity.value);
-      const modules = this.getModulesForTarget(entity.type).slice(0, 3); // Limit modules for recursive
+      const maxMods = modulesPerType[entity.type] || 3;
+
+      // Récupérer les modules pertinents, triés par priorité (haut = plus prioritaire)
+      const modules = this.getModulesForTarget(entity.type)
+        .sort((a: any, b: any) => (a.priority || 99) - (b.priority || 99))
+        .slice(0, maxMods);
 
       yield* this.executeModules(
         modules, entity.value, entity.type, currentDepth,
