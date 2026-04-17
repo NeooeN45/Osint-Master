@@ -1,0 +1,85 @@
+# =============================================================================
+# Prometheus Configuration
+# Configuration pour la collecte des métriques OSINT Master
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'osint-master'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# Alert rules
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Prometheus Self-Monitoring
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # OSINT Master Backend API
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'osint-backend'
+    static_configs:
+      - targets: ['host.docker.internal:3002']
+    scrape_interval: 30s
+    metrics_path: /api/monitoring/metrics
+    scheme: http
+    scrape_timeout: 10s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # OSINT Master Frontend
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'osint-frontend'
+    static_configs:
+      - targets: ['host.docker.internal:5173']
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Docker Containers
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # System Metrics (Node Exporter)
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # VPN Container
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'vpn-health'
+    static_configs:
+      - targets: ['osint-vpn:51820']
+    scrape_interval: 60s
+    scrape_timeout: 5s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Tor Proxy
+  # ═══════════════════════════════════════════════════════════════════════════
+  - job_name: 'tor-proxy'
+    static_configs:
+      - targets: ['tor-proxy:9050']
+    scrape_interval: 60s
+    scrape_timeout: 5s

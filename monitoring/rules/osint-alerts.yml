@@ -1,0 +1,140 @@
+# =============================================================================
+# Prometheus Alert Rules
+# Règles d'alerte pour OSINT Master
+# =============================================================================
+
+groups:
+  - name: osint-master
+    interval: 30s
+    rules:
+      # ═══════════════════════════════════════════════════════════════════════
+      # High Availability Alerts
+      # ═══════════════════════════════════════════════════════════════════════
+      - alert: BackendDown
+        expr: up{job="osint-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OSINT Master Backend is down"
+          description: "The backend API has been down for more than 1 minute"
+
+      - alert: VPNDisconnected
+        expr: vpn_connection_status == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "VPN Connection Lost"
+          description: "The VPN tunnel is disconnected. Traffic may be exposed."
+
+      - alert: TorProxyDown
+        expr: tor_proxy_status == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tor Proxy is down"
+          description: "The Tor SOCKS5 proxy is not responding"
+
+      # ═══════════════════════════════════════════════════════════════════════
+      # Performance Alerts
+      # ═══════════════════════════════════════════════════════════════════════
+      - alert: HighCPUUsage
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 80% for more than 5 minutes"
+
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 85% for more than 5 minutes"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_size_bytes{mountpoint="/"} - node_filesystem_avail_bytes{mountpoint="/"}) / node_filesystem_size_bytes{mountpoint="/"} * 100 > 90
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space critically low"
+          description: "Less than 10% disk space remaining"
+
+      # ═══════════════════════════════════════════════════════════════════════
+      # Security Alerts
+      # ═══════════════════════════════════════════════════════════════════════
+      - alert: TooManyFailedLogins
+        expr: increase(osint_failed_logins_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Multiple failed login attempts"
+          description: "More than 10 failed login attempts in the last 5 minutes"
+
+      - alert: SuspiciousAPIActivity
+        expr: rate(osint_api_requests_total{status=~"4xx|5xx"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High rate of API errors"
+          description: "API is returning many 4xx/5xx errors"
+
+      # ═══════════════════════════════════════════════════════════════════════
+      # Investigation Alerts
+      # ═══════════════════════════════════════════════════════════════════════
+      - alert: InvestigationStalled
+        expr: osint_investigation_duration_minutes > 30
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Long-running investigation detected"
+          description: "An investigation has been running for over 30 minutes"
+
+      - alert: CacheHitRateLow
+        expr: osint_cache_hit_rate < 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Cache hit rate is low"
+          description: "Consider reviewing cache configuration"
+
+  - name: container-alerts
+    interval: 30s
+    rules:
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes / container_memory_limit_bytes) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high memory usage"
+          description: "Container is using more than 80% of its memory limit"
+
+      - alert: ContainerHighCPU
+        expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high CPU usage"
+          description: "Container is using more than 80% of its CPU limit"
+
+      - alert: ContainerRestartLoop
+        expr: rate(container_restarts_total[15m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.name }} restart loop"
+          description: "Container is restarting frequently"
