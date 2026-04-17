@@ -465,8 +465,39 @@ Améliorations du backend pour monitoring, performance et stabilité.
   - Stats hit/miss rate
   - Eviction LRU
 
-### Phase 7: Features Additionnelles (À VENIR)
-- [ ] InstagramPrivSniffer module
+### ✅ Phase 7: InstagramPrivSniffer (COMPLÈTE - 17 Avril 2026)
+Module de visualisation de profils Instagram privés avec UI v2 Google Dark Minimalist.
+
+- [x] **InstagramPrivSniffer Service** (`backend/src/services/instagramPrivSniffer.ts`)
+  - Google cache search pour posts historiques
+  - Archive.org Wayback Machine integration
+  - Tagged photos discovery (photos où le user est tagué)
+  - Reels publics analysis (souvent publics même si compte privé)
+  - Story highlights detection
+  - Shadow followers analysis (qui suit le compte privé)
+  - Mutual friends (avec session ID)
+  - Risk exposure calculation (low/medium/high/critical)
+  - Cache integration pour résultats
+  - Batch processing (10 usernames max)
+
+- [x] **API Routes** (`backend/src/routes/instagram-priv.ts`)
+  - POST /instagram-priv/sniff - Analyser un profil
+  - POST /instagram-priv/batch - Analyse batch
+  - GET /instagram-priv/status - Status du service
+
+- [x] **UI Component v2** (`src/components/InstagramPrivSnifferUI.tsx`)
+  - Design: Google Dark Minimalist (noir 90%, accents purple/pink)
+  - Gradient header purple→pink
+  - Risk indicator avec couleurs dynamiques
+  - Profile card avec avatar, stats, bio
+  - Exposed content gallery (grid responsive)
+  - Shadow followers list (tags cyan)
+  - Mutual friends list (tags pink)
+  - Session ID input (optional, pour enhanced access)
+  - Framer Motion animations
+  - Collapsible sections
+
+### Phase 8: Features Additionnelles (À VENIR)
 - [ ] Three.js globe visualization
 - [ ] Advanced correlation graph
 - [ ] Report generation (PDF, HTML)
