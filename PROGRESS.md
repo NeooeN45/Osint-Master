@@ -497,7 +497,41 @@ Module de visualisation de profils Instagram privés avec UI v2 Google Dark Mini
   - Framer Motion animations
   - Collapsible sections
 
-### Phase 8: Features Additionnelles (À VENIR)
+### ✅ Phase 8: VPN Integration (COMPLÈTE - 17 Avril 2026)
+Intégration WireGuard VPN pour sécuriser tout le traffic OSINT.
+
+- [x] **Dockerfile.wireguard** - Container VPN WireGuard
+  - WireGuard client avec wg-quick
+  - Scripts de gestion: connect, disconnect, rotate, check_ip
+  - Kill switch iptables (bloque tout traffic si VPN down)
+  - Health check périodique
+  - Support multi-providers: ProtonVPN, Mullvad, NordVPN, custom
+
+- [x] **VPNManager** (`backend/src/services/vpnManager.ts`)
+  - Gestion configurations multi-providers
+  - Connect/disconnect/rotate IPs
+  - Kill switch toggle
+  - IP location tracking (ipinfo.io)
+  - Health monitoring (ping via interface)
+  - Stats: uptime, connections, data transferred
+
+- [x] **VPN Routes** (`backend/src/routes/vpn.ts`)
+  - GET /vpn/status, /vpn/health
+  - POST /vpn/connect, /vpn/disconnect, /vpn/rotate
+  - /vpn/configs/* CRUD configurations
+  - /vpn/killswitch/* toggle protection
+
+- [x] **VPNUI** (`src/components/VPNUI.tsx`) - Google Dark Minimalist v2
+  - Design emerald/cyan accents
+  - Connection toggle avec animation pulse
+  - IP display: Public IP + VPN IP
+  - Location selector (when disconnected)
+  - Stats cards: download/upload/connections/uptime
+  - Kill switch toggle
+  - Available servers grid
+  - IP rotation button
+
+### Phase 9: Features Additionnelles (À VENIR)
 - [ ] Three.js globe visualization
 - [ ] Advanced correlation graph
 - [ ] Report generation (PDF, HTML)
