@@ -13,6 +13,9 @@ import { phoneModules } from "./phone/index.js";
 import { cryptoModules } from "./crypto/index.js";
 import { socialModules } from "./social/index.js";
 import { webAdvancedModules } from "./web-advanced/index.js";
+import { imageModules } from "./image/index.js";
+import { personModules } from "./person/index.js";
+import { companyModules } from "./company/index.js";
 import { detectTargetType } from "./utils";
 
 // Export des types
@@ -29,6 +32,9 @@ export { phoneModules } from "./phone";
 export { cryptoModules } from "./crypto";
 export { socialModules } from "./social";
 export { webAdvancedModules } from "./web-advanced";
+export { imageModules } from "./image";
+export { personModules } from "./person";
+export { companyModules } from "./company";
 
 // Registre complet
 export const allModules: OSINTModule[] = [
@@ -42,6 +48,9 @@ export const allModules: OSINTModule[] = [
   ...cryptoModules,
   ...socialModules,
   ...webAdvancedModules,
+  ...imageModules,
+  ...personModules,
+  ...companyModules,
 ];
 
 // Mappage type de cible -> modules pertinents
@@ -91,7 +100,22 @@ export const modulesByTargetType: Record<string, string[]> = {
   ],
   person: [
     "sherlock", "maigret", "github_search", "sherlock_docker",
-    "social_aggregator", "profile_picture_search", "cross_platform_correlator"
+    "social_aggregator", "profile_picture_search", "cross_platform_correlator",
+    "pipl_search", "spokeo_search", "whitepages_search", "intelius_search", "beenverified_search",
+    "truthfinder_search", "fastpeoplesearch", "truepeoplesearch", "familytreenow", "ancestry_search",
+    "voter_records", "court_records", "property_records", "professional_licenses", "death_records",
+    "classmates_search", "radaris_search", "peekyou_search", "zabasearch", "google_people_search"
+  ],
+  company: [
+    "linkedin_company", "crunchbase", "bloomberg_company", "sec_edgar", "opencorporates",
+    "glassdoor", "indeed_company", "yelp_business", "bbb_search", "hoovers", "angellist",
+    "pitchbook", "trademark_search", "patent_search", "domaintools_company", "hunter_company",
+    "voilanorbert", "snov_io", "rocketreach", "apollo_io"
+  ],
+  image: [
+    "google_reverse_image", "yandex_reverse_image", "tineye_reverse_image", "bing_visual_search",
+    "pimeyes_search", "facecheck_id", "exif_extractor", "image_forensics", "ela_analysis",
+    "metadata_analyzer", "image_location", "screenshot_timestamp"
   ],
 };
 
