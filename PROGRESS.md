@@ -404,14 +404,36 @@ git push origin main
   - SSE streaming pour logs et exécutions
   - Auth middleware intégré
 
-### Phase 4: UI v2 Implementation
-- [ ] Setup Shadcn UI
-- [ ] Install Aceternity UI
-- [ ] Install animation libraries (GSAP, Framer Motion)
-- [ ] Implement Hero Section (gradient + particles)
-- [ ] Implement Dark Sidebar (cyan accents)
-- [ ] Implement Dashboard Cards
-- [ ] Implement Tool Runner UI (pulse animations)
+### ✅ Phase 4: Backend Upgrade Support (COMPLÈTE - 17 Avril 2026)
+Amélioration du backend pour accepter les modifications à chaud et la mise à niveau.
+
+- [x] **ConfigManager** (`backend/src/services/configManager.ts`)
+  - Chargement configuration depuis .env
+  - Hot reload sans redémarrage (file watcher)
+  - Validation des changements
+  - API endpoints pour mise à jour dynamique
+  - Backup/restore configuration
+  
+- [x] **Dynamic Config Routes** (`backend/src/routes/config-dynamic.ts`)
+  - GET/PUT /config - Gestion configuration
+  - PUT /config/apikey/:name - Clés API
+  - POST /config/feature/:name/toggle - Feature flags
+  - POST /config/reload - Forcer reload .env
+  - POST /config/save - Persistance
+  
+- [x] **HotReload Service** (`backend/src/services/hotReload.ts`)
+  - Hot reload des modules sans redémarrage
+  - Gestion dépendances circulaires
+  - Backup/restore état
+  - File watching automatique
+  
+- [x] **HotReload Routes** (`backend/src/routes/hotreload.ts`)
+  - POST /hotreload/modules/:name/reload
+  - POST /hotreload/modules/:name/upgrade
+  - POST /hotreload/watch/start|stop
+  - Gestion services et métriques
+
+### Phase 5: UI v2 Implementation (COMPLÈTE - intégré Phase 2)
 
 ### Phase 5: Docker Booster (COMPLÈTE - intégré Phase 3)
 - [ ] VPN integration
