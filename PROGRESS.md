@@ -348,9 +348,15 @@ git push origin main
 - [x] **Quick Tools** - Grid de 6 outils rapides
 - [x] **Effet wow** - Glow sur valeurs importantes
 
-#### 2.5 Prochaines étapes
-- [ ] **Integration** - Connecter Sidebar + Dashboard à App.tsx
+#### 2.5 Integration ✅
+- [x] **DashboardV2** - `src/app/views/DashboardV2.tsx` créé
+- [x] **Hero + Sidebar + Dashboard** - Layout responsive intégré
+- [x] **Navigation** - Toggle Hero, sidebar collapsible
+- [x] **Export** - Ajouté à `views/index.ts`
+
+#### 2.6 Prochaines étapes
 - [ ] **Tool Runner UI** - Pulse animations lors exécution
+- [ ] **Route App.tsx** - Intégrer DashboardV2 dans l'app principale
 
 ### Phase 3: Docker Booster (À VENIR)
 - [ ] Dockerfile.tools

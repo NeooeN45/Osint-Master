@@ -5,3 +5,4 @@ export { default as PhotoGallery } from "./PhotoGallery";
 export { default as PersonProfile } from "./PersonProfile";
 export { default as ExportManager } from "./ExportManager";
 export { default as ModuleMarketplace } from "./ModuleMarketplace";
+export { DashboardV2, DashboardV2WithNav } from "./DashboardV2";
