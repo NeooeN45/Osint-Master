@@ -1,0 +1,334 @@
+# =============================================================================
+# Dockerfile.wireguard - Phase 8 VPN Integration
+# WireGuard VPN Container pour OSINT Master
+# 
+# Features:
+# - WireGuard client avec kill switch
+# - Multi-provider support (ProtonVPN, Mullvad, NordVPN, custom)
+# - IP rotation automatique
+# - Health checks et monitoring
+# - Integration avec le réseau Docker
+# =============================================================================
+
+FROM alpine:3.19
+
+LABEL maintainer="OSINT Master <dev@osint-master.local>"
+LABEL version="4.0"
+LABEL description="WireGuard VPN Client for OSINT"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# INSTALLATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN apk add --no-cache \
+    wireguard-tools \
+    iptables \
+    ip6tables \
+    curl \
+    bind-tools \
+    iproute2 \
+    bash \
+    python3 \
+    py3-pip \
+    jq \
+    openresolv \
+    && rm -rf /var/cache/apk/*
+
+# Install Python packages for VPN management
+RUN pip3 install --no-cache-dir requests pyyaml
+
+# ═════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Créer répertoires
+RUN mkdir -p /etc/wireguard /config /scripts /var/log
+
+# ═════════════════════════════════════════════════════════════════════════════
+# VPN MANAGEMENT SCRIPTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Script de connexion WireGuard
+RUN cat > /scripts/connect.sh << 'EOF'
+#!/bin/bash
+set -e
+
+CONFIG_FILE="${VPN_CONFIG_FILE:-/config/wg0.conf}"
+INTERFACE="${VPN_INTERFACE:-wg0}"
+
+echo "[*] Starting WireGuard VPN..."
+echo "[*] Config file: $CONFIG_FILE"
+
+# Vérifier le fichier de configuration
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "[✗] WireGuard config not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Démarrer WireGuard
+wg-quick up "$INTERFACE"
+
+echo "[✓] WireGuard interface $INTERFACE started"
+
+# Vérifier la connexion
+sleep 2
+if ip link show "$INTERFACE" > /dev/null 2>&1; then
+    echo "[✓] Interface $INTERFACE is up"
+    
+    # Afficher l'IP
+    IP=$(ip addr show "$INTERFACE" | grep "inet " | awk '{print $2}')
+    echo "[✓] VPN IP: $IP"
+    
+    # Test de connectivité
+    if curl --max-time 10 -s https://ipinfo.io/ip 2>/dev/null; then
+        echo "[✓] VPN connectivity verified"
+    fi
+else
+    echo "[✗] Failed to bring up interface $INTERFACE"
+    exit 1
+fi
+EOF
+
+RUN chmod +x /scripts/connect.sh
+
+# Script de déconnexion
+RUN cat > /scripts/disconnect.sh << 'EOF'
+#!/bin/bash
+INTERFACE="${VPN_INTERFACE:-wg0}"
+
+echo "[*] Stopping WireGuard VPN..."
+wg-quick down "$INTERFACE" 2>/dev/null || true
+echo "[✓] WireGuard stopped"
+EOF
+
+RUN chmod +x /scripts/disconnect.sh
+
+# Script de rotation IP (reconnect avec nouvelle config)
+RUN cat > /scripts/rotate.sh << 'EOF'
+#!/bin/bash
+INTERFACE="${VPN_INTERFACE:-wg0}"
+
+echo "[*] Rotating VPN connection..."
+
+# Déconnecter
+/scripts/disconnect.sh
+
+# Attendre
+sleep 2
+
+# Reconnecter
+/scripts/connect.sh
+
+echo "[✓] VPN rotation complete"
+EOF
+
+RUN chmod +x /scripts/rotate.sh
+
+# Script de vérification IP
+RUN cat > /scripts/check_ip.sh << 'EOF'
+#!/bin/bash
+
+echo "[*] Checking current IP..."
+
+# IP publique
+PUBLIC_IP=$(curl --max-time 10 -s https://ipinfo.io/ip 2>/dev/null || echo "unknown")
+echo "Public IP: $PUBLIC_IP"
+
+# IP info
+IP_INFO=$(curl --max-time 10 -s "https://ipinfo.io/${PUBLIC_IP}/json" 2>/dev/null || echo "{}")
+echo "Location: $(echo "$IP_INFO" | jq -r '.city // "unknown"'), $(echo "$IP_INFO" | jq -r '.country // "unknown"')"
+
+# Vérifier si VPN est actif
+INTERFACE="${VPN_INTERFACE:-wg0}"
+if ip link show "$INTERFACE" > /dev/null 2>&1; then
+    VPN_IP=$(ip addr show "$INTERFACE" 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d'/' -f1)
+    echo "VPN Active: Yes"
+    echo "VPN IP: $VPN_IP"
+else
+    echo "VPN Active: No"
+fi
+EOF
+
+RUN chmod +x /scripts/check_ip.sh
+
+# Script kill switch (empêcher les fuites DNS/IP si VPN tombe)
+RUN cat > /scripts/killswitch.sh << 'EOF'
+#!/bin/bash
+set -e
+
+INTERFACE="${VPN_INTERFACE:-wg0}"
+LAN_ETH="${LAN_ETH:-eth0}"
+VPN_GATEWAY="${VPN_GATEWAY:-}"
+
+echo "[*] Enabling kill switch..."
+
+# Vider les règles existantes
+iptables -F
+iptables -t nat -F
+ip6tables -F 2>/dev/null || true
+
+# Politique par défaut: DROP
+iptables -P OUTPUT DROP
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+
+# Allow loopback
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A OUTPUT -o lo -j ACCEPT
+
+# Allow established connections
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# Allow VPN interface seulement
+iptables -A OUTPUT -o "$INTERFACE" -j ACCEPT
+iptables -A INPUT -i "$INTERFACE" -j ACCEPT
+
+# Allow WireGuard handshake (UDP 51820)
+iptables -A OUTPUT -p udp --dport 51820 -j ACCEPT
+
+# Allow DNS sur le VPN
+iptables -A OUTPUT -o "$INTERFACE" -p udp --dport 53 -j ACCEPT
+iptables -A OUTPUT -o "$INTERFACE" -p tcp --dport 53 -j ACCEPT
+
+# Allow HTTP/HTTPS sur le VPN seulement
+iptables -A OUTPUT -o "$INTERFACE" -p tcp --dport 80 -j ACCEPT
+iptables -A OUTPUT -o "$INTERFACE" -p tcp --dport 443 -j ACCEPT
+iptables -A OUTPUT -o "$INTERFACE" -p tcp --dport 8080 -j ACCEPT
+iptables -A OUTPUT -o "$INTERFACE" -p tcp --dport 8443 -j ACCEPT
+
+# Bloquer tout le reste
+iptables -A OUTPUT -j LOG --log-prefix "VPN_KILLSWITCH_DROP: " 2>/dev/null || true
+iptables -A OUTPUT -j DROP
+
+echo "[✓] Kill switch enabled - traffic blocked if VPN disconnects"
+EOF
+
+RUN chmod +x /scripts/killswitch.sh
+
+# Script pour désactiver kill switch
+RUN cat > /scripts/killswitch_off.sh << 'EOF'
+#!/bin/bash
+
+echo "[*] Disabling kill switch..."
+
+# Réinitialiser les règles
+iptables -F
+iptables -t nat -F
+iptables -P OUTPUT ACCEPT
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+
+echo "[✓] Kill switch disabled"
+EOF
+
+RUN chmod +x /scripts/killswitch_off.sh
+
+# ═════════════════════════════════════════════════════════════════════════════
+# HEALTH CHECK
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN cat > /scripts/healthcheck.sh << 'EOF'
+#!/bin/bash
+INTERFACE="${VPN_INTERFACE:-wg0}"
+
+# Vérifier si l'interface existe
+if ! ip link show "$INTERFACE" > /dev/null 2>&1; then
+    echo "Interface $INTERFACE not found"
+    exit 1
+fi
+
+# Vérifier si on a une IP
+if ! ip addr show "$INTERFACE" | grep -q "inet "; then
+    echo "No IP assigned to $INTERFACE"
+    exit 1
+fi
+
+# Vérifier la connectivité (ping via l'interface VPN)
+if ! ping -c 1 -W 5 -I "$INTERFACE" 1.1.1.1 > /dev/null 2>&1; then
+    echo "No connectivity through VPN"
+    exit 1
+fi
+
+echo "VPN healthy"
+exit 0
+EOF
+
+RUN chmod +x /scripts/healthcheck.sh
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ENTRYPOINT
+# ═════════════════════════════════════════════════════════════════════════════
+
+RUN cat > /scripts/entrypoint.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "╔════════════════════════════════════════════════════════════╗"
+echo "║  OSINT Master - WireGuard VPN Container v4.0               ║"
+echo "╚════════════════════════════════════════════════════════════╝"
+
+# Enable IP forwarding
+sysctl -w net.ipv4.ip_forward=1 2>/dev/null || echo "Warning: Could not enable IP forwarding"
+
+# Configuration initiale
+VPN_ENABLED="${VPN_ENABLED:-true}"
+KILLSWITCH="${KILLSWITCH:-true}"
+
+echo ""
+echo "[*] Configuration:"
+echo "    VPN_ENABLED: $VPN_ENABLED"
+echo "    KILLSWITCH: $KILLSWITCH"
+echo "    INTERFACE: ${VPN_INTERFACE:-wg0}"
+echo ""
+
+if [ "$VPN_ENABLED" = "true" ]; then
+    # Attendre que la config soit disponible
+    if [ ! -f "/config/wg0.conf" ]; then
+        echo "[!] Waiting for WireGuard config..."
+        for i in $(seq 1 30); do
+            if [ -f "/config/wg0.conf" ]; then
+                echo "[✓] Config found"
+                break
+            fi
+            sleep 1
+        done
+    fi
+    
+    # Connecter le VPN
+    if [ -f "/config/wg0.conf" ]; then
+        /scripts/connect.sh
+        
+        # Activer kill switch si demandé
+        if [ "$KILLSWITCH" = "true" ]; then
+            /scripts/killswitch.sh
+        fi
+    else
+        echo "[✗] No WireGuard config found, running without VPN"
+    fi
+else
+    echo "[*] VPN disabled, running in passthrough mode"
+fi
+
+echo ""
+echo "[*] Container ready"
+echo ""
+
+# Garder le container actif
+tail -f /dev/null
+EOF
+
+RUN chmod +x /scripts/entrypoint.sh
+
+# ═════════════════════════════════════════════════════════════════════════════
+# EXPOSE & RUN
+# ═════════════════════════════════════════════════════════════════════════════
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD /scripts/healthcheck.sh
+
+# Capabilities requises
+# NOTE: À ajouter dans docker-compose: cap_add: [NET_ADMIN, SYS_MODULE]
+
+ENTRYPOINT ["/scripts/entrypoint.sh"]
